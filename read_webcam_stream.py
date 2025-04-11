@@ -18,15 +18,15 @@ def list_available_cameras(max_cameras=20):
             cap.release()
     return available_cameras
 
-def launch_webcam(camera_index=0):
+def launch_webcam(camera_index=0, frame_callback=None):
     """
-    Launches the webcam and displays the video stream in a popup window.
+    Launches the webcam and processes frames using an optional callback function.
     Press 'q' to quit the video stream.
 
     Parameters:
         camera_index (int or str): The index or device path of the webcam.
+        frame_callback (function): A function to process each frame.
     """
-    # Open a connection to the specified webcam
     cap = cv2.VideoCapture(camera_index)
 
     if not cap.isOpened():
@@ -36,21 +36,23 @@ def launch_webcam(camera_index=0):
     print("Press 'q' to quit the video stream.")
 
     while True:
-        # Capture frame-by-frame
         ret, frame = cap.read()
 
         if not ret:
             print("Error: Failed to capture frame.")
             break
 
-        # Display the resulting frame
+        # Process the frame using the callback function, if provided
+        if frame_callback:
+            frame = frame_callback(frame)
+
+        # Display the frame
         cv2.imshow("Webcam Stream", frame)
 
         # Break the loop when 'q' is pressed
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
-    # Release the capture and close the window
     cap.release()
     cv2.destroyAllWindows()
 
