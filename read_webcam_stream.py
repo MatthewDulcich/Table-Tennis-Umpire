@@ -1,4 +1,5 @@
 import cv2
+import time
 
 def list_available_cameras(max_cameras=20):
     """
@@ -39,12 +40,17 @@ def launch_webcam(camera_index=0, frame_callback=None):
         ret, frame = cap.read()
 
         if not ret:
-            print("Error: Failed to capture frame.")
-            break
+            print("Warning: Failed to capture frame. Retrying...")
+            time.sleep(0.1)  # Wait briefly before retrying
+            continue
 
         # Process the frame using the callback function, if provided
         if frame_callback:
-            frame = frame_callback(frame)
+            try:
+                frame = frame_callback(frame)
+            except Exception as e:
+                print(f"Error during frame processing: {e}")
+                continue
 
         # Display the frame
         cv2.imshow("Webcam Stream", frame)
