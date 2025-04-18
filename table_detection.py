@@ -41,3 +41,28 @@ def detect_table_top(frame):
             break  # Assuming there's only one table top to detect
 
     return frame
+
+def segment_table_top(frame, lower_hsv, upper_hsv):
+    """
+    Segments the table top in a given frame using color-based segmentation.
+
+    Parameters:
+        frame (numpy.ndarray): The input frame from the webcam.
+        lower_hsv (tuple): The lower HSV bounds for segmentation.
+        upper_hsv (tuple): The upper HSV bounds for segmentation.
+
+    Returns:
+        numpy.ndarray: A binary mask where the table top is segmented.
+    """
+    # Convert the frame to HSV color space
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+
+    # Create a binary mask based on the HSV range
+    mask = cv2.inRange(hsv, lower_hsv, upper_hsv)
+
+    # Optional: Apply morphological operations to clean up the mask
+    kernel = np.ones((5, 5), np.uint8)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+
+    return mask
