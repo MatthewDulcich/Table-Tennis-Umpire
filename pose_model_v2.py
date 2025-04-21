@@ -11,7 +11,7 @@ mp_drawing = mp.solutions.drawing_utils
 mp_pose = mp.solutions.pose
 
 # Path to your lightweight model
-MODEL_PATH = "pose_landmarker_heavy.task"
+MODEL_PATH = "models/pose_landmarker_heavy.task"
 
 # Smoothing parameters
 alpha = 0.7

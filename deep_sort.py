@@ -168,7 +168,7 @@ def extract_features(images):
 # --- Main Execution ---
 if __name__ == "__main__":
     cap = cv2.VideoCapture(0)
-    detector = YOLO("yolov5nu.pt")  # Lightweight YOLOv5 model
+    detector = YOLO("models/yolov5nu.pt")  # Lightweight YOLOv5 model
     tracker = DeepSORT(max_age=30)  # Adjust max_age as needed
 
     while True:
