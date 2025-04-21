@@ -1,11 +1,11 @@
 from read_webcam_stream import list_available_cameras, launch_webcam
-from sorted_pose_detection.deep_sort_pose_estimation import run_pose_tracking
-from sorted_pose_detection.pose_model import PoseModel
-from sorted_pose_detection.deep_sort import DeepSORT
+from sorted_pose_detection import DeepSORT, PoseModel, run_pose_tracking
 from ultralytics import YOLO
 from tensorflow.keras.applications import MobileNetV3Small
 import tensorflow as tf
 import cv2
+import numpy as np
+from typing import Any
 
 # Initialize required models globally once
 pose_model = PoseModel()
@@ -22,7 +22,7 @@ base_model = MobileNetV3Small(
 x = tf.keras.layers.Dense(128, activation='relu')(base_model.output)
 feature_model = tf.keras.Model(inputs=base_model.input, outputs=x)
 
-def process_frame(frame):
+def process_frame(frame: np.ndarray) -> np.ndarray:
     """
     Processes a single frame by performing pose estimation and tracking.
 
@@ -34,7 +34,7 @@ def process_frame(frame):
     """
     return run_pose_tracking(frame, detector, tracker, pose_model, feature_model)
 
-def main():
+def main() -> None:
     """
     Main function to list available cameras and launch the selected webcam.
     """

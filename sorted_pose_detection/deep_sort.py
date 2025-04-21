@@ -1,7 +1,14 @@
 import numpy as np
 from scipy.optimize import linear_sum_assignment
+from typing import List, Tuple
+
 
 class KalmanFilter:
+    """
+    A simple Kalman Filter for tracking objects in video.
+    It predicts the next state and updates the state estimate given a new measurement.
+    """
+
     def __init__(self):
         self.dt = 1.0
         self.A = np.eye(7)
@@ -12,12 +19,33 @@ class KalmanFilter:
         self.Q = np.eye(7) * 1e-2
         self.R = np.eye(4) * 1e-1
 
-    def predict(self, mean, cov):
+    def predict(self, mean: np.ndarray, cov: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Predict the next state and covariance.
+
+        Parameters:
+            mean (np.ndarray): The current state estimate.
+            cov (np.ndarray): The current covariance estimate.
+
+        Returns:
+            tuple: Predicted state and covariance.
+        """
         mean = self.A @ mean
         cov = self.A @ cov @ self.A.T + self.Q
         return mean, cov
 
-    def update(self, mean, cov, measurement):
+    def update(self, mean: np.ndarray, cov: np.ndarray, measurement: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Update the state estimate with a new measurement.
+
+        Parameters:
+            mean (np.ndarray): The predicted state estimate.
+            cov (np.ndarray): The predicted covariance estimate.
+            measurement (np.ndarray): The new observation.
+
+        Returns:
+            tuple: Updated state and covariance.
+        """
         S = self.H @ cov @ self.H.T + self.R
         K = cov @ self.H.T @ np.linalg.inv(S)
         y = measurement - (self.H @ mean)
@@ -25,8 +53,13 @@ class KalmanFilter:
         cov = cov - K @ self.H @ cov
         return mean, cov
 
+
 class Track:
-    def __init__(self, id, bbox, feature, kf, max_age=30):
+    """
+    Represents a single tracked object with state and Kalman Filter.
+    """
+
+    def __init__(self, id: int, bbox: List[float], feature: np.ndarray, kf: KalmanFilter, max_age: int = 30):
         self.id = id
         self.kf = kf
         self.mean = self._xywh_to_state(bbox)
@@ -36,11 +69,26 @@ class Track:
         self.time_since_update = 0
         self.max_age = max_age
 
-    def _xywh_to_state(self, bbox):
+    def _xywh_to_state(self, bbox: List[float]) -> np.ndarray:
+        """
+        Convert a bounding box (x, y, w, h) to a Kalman filter state vector.
+
+        Parameters:
+            bbox (list): Bounding box in (x, y, w, h) format.
+
+        Returns:
+            np.ndarray: State vector.
+        """
         x, y, w, h = bbox
         return np.array([x + w / 2, y + h / 2, w * h, w / h, 0, 0, 0], dtype=np.float32)
 
-    def get_bbox(self):
+    def get_bbox(self) -> List[float]:
+        """
+        Convert current state back to bounding box format (x, y, w, h).
+
+        Returns:
+            list: Bounding box as [x, y, w, h].
+        """
         cx, cy, s, r = self.mean[:4]
         val = s * r
         if val <= 0:
@@ -50,25 +98,50 @@ class Track:
             h = s / w
         return [cx - w / 2, cy - h / 2, w, h]
 
-    def predict(self):
+    def predict(self) -> None:
+        """
+        Predict the next state of the track using the Kalman Filter.
+        """
         self.mean, self.cov = self.kf.predict(self.mean, self.cov)
         self.age += 1
         self.time_since_update += 1
 
-    def update(self, bbox, feature):
+    def update(self, bbox: List[float], feature: np.ndarray) -> None:
+        """
+        Update the track state with a new bounding box and feature vector.
+
+        Parameters:
+            bbox (list): Detected bounding box.
+            feature (np.ndarray): Associated appearance feature.
+        """
         measurement = self._xywh_to_state(bbox)[:4]
         self.mean, self.cov = self.kf.update(self.mean, self.cov, measurement)
         self.feature = feature
         self.time_since_update = 0
 
+
 class DeepSORT:
-    def __init__(self, max_age=30):
+    """
+    A multi-object tracker that uses Kalman filtering and appearance feature matching.
+    """
+
+    def __init__(self, max_age: int = 30):
         self.kf = KalmanFilter()
-        self.tracks = []
+        self.tracks: List[Track] = []
         self.next_id = 0
         self.max_age = max_age
 
-    def update(self, bboxes, features):
+    def update(self, bboxes: List[List[float]], features: List[np.ndarray]) -> List[Track]:
+        """
+        Update tracked objects based on new detections.
+
+        Parameters:
+            bboxes (list): List of bounding boxes (x, y, w, h).
+            features (list): List of feature vectors for each detection.
+
+        Returns:
+            list: Updated list of active Track objects.
+        """
         for track in self.tracks:
             track.predict()
 
@@ -98,4 +171,3 @@ class DeepSORT:
 
         self.tracks = [t for t in self.tracks if t.time_since_update <= t.max_age]
         return self.tracks
-

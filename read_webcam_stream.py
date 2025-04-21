@@ -1,7 +1,8 @@
 import cv2
 import time
+from typing import Callable, Optional, Union, List
 
-def list_available_cameras(max_cameras=20):
+def list_available_cameras(max_cameras: int = 20) -> List[int]:
     """
     Lists all available cameras by attempting to open them.
 
@@ -19,7 +20,10 @@ def list_available_cameras(max_cameras=20):
             cap.release()
     return available_cameras
 
-def launch_webcam(camera_index=0, frame_callback=None):
+def launch_webcam(
+    camera_index: Union[int, str] = 0,
+    frame_callback: Optional[Callable[[any], any]] = None
+) -> None:
     """
     Launches the webcam and processes frames using an optional callback function.
     Press 'q' to quit the video stream.
@@ -34,7 +38,7 @@ def launch_webcam(camera_index=0, frame_callback=None):
         print(f"Error: Could not open webcam with index/path {camera_index}.")
         return
 
-    print("Press 'q' to quit the video stream.")
+    print("Press 'esc' to quit the video stream.")
 
     while True:
         ret, frame = cap.read()
@@ -56,7 +60,7 @@ def launch_webcam(camera_index=0, frame_callback=None):
         cv2.imshow("Webcam Stream", frame)
 
         # Break the loop when 'q' is pressed
-        if cv2.waitKey(1) & 0xFF == ord('q'):
+        if cv2.waitKey(1) & 0xFF == 27:  # 27 is the ASCII code for 'esc'
             break
 
     cap.release()

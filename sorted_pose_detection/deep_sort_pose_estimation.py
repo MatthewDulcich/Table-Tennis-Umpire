@@ -6,8 +6,11 @@ from ultralytics import YOLO
 from sorted_pose_detection.pose_model import PoseModel
 from sorted_pose_detection.deep_sort import DeepSORT
 
-# --- TensorFlow Configuration ---
-def configure_tensorflow():
+
+def configure_tensorflow() -> None:
+    """
+    Configure TensorFlow to use GPU with memory growth if available.
+    """
     gpus = tf.config.list_physical_devices('GPU')
     if gpus:
         try:
@@ -19,9 +22,19 @@ def configure_tensorflow():
     else:
         print("No GPU detected. Using CPU for TensorFlow.")
 
-# --- Feature Extractor ---
-def build_model(input_shape=(224, 224, 3)):
+
+def build_model(input_shape: tuple = (224, 224, 3)) -> tf.keras.Model:
+    """
+    Build and return a MobileNetV3Small-based feature extractor model.
+
+    Args:
+        input_shape (tuple): The shape of the input image.
+
+    Returns:
+        tf.keras.Model: A Keras model that outputs 128-dimensional feature vectors.
+    """
     from tensorflow.keras.applications import MobileNetV3Small
+
     base = MobileNetV3Small(
         input_shape=input_shape,
         include_top=False,
@@ -32,8 +45,18 @@ def build_model(input_shape=(224, 224, 3)):
     x = tf.keras.layers.Dense(128, activation='relu')(base.output)
     return tf.keras.Model(inputs=base.input, outputs=x)
 
-# --- Crop and Feature Extraction ---
-def extract_crops(frame, bboxes):
+
+def extract_crops(frame: np.ndarray, bboxes: list) -> np.ndarray:
+    """
+    Crop and resize image patches based on bounding boxes.
+
+    Args:
+        frame (np.ndarray): The full image frame.
+        bboxes (list): List of bounding boxes [x, y, w, h].
+
+    Returns:
+        np.ndarray: Array of cropped and resized image patches.
+    """
     crops = []
     for x, y, w, h in bboxes:
         x, y, w, h = map(int, [x, y, w, h])
@@ -45,13 +68,43 @@ def extract_crops(frame, bboxes):
         crops.append(crop)
     return np.array(crops)
 
-def extract_features(images, model):
+
+def extract_features(images: np.ndarray, model: tf.keras.Model) -> np.ndarray:
+    """
+    Extract features for each image crop using the given model.
+
+    Args:
+        images (np.ndarray): Batch of images.
+        model (tf.keras.Model): Feature extractor model.
+
+    Returns:
+        np.ndarray: Extracted feature vectors.
+    """
     images = tf.convert_to_tensor(images, dtype=tf.float32)
     images = images / 127.5 - 1.0
     return model(images, training=False).numpy()
 
-# --- Pose Tracking Pipeline ---
-def run_pose_tracking(frame, detector, tracker, pose_model, feature_model):
+
+def run_pose_tracking(
+    frame: np.ndarray,
+    detector: YOLO,
+    tracker: DeepSORT,
+    pose_model: PoseModel,
+    feature_model: tf.keras.Model
+) -> np.ndarray:
+    """
+    Perform pose estimation and tracking on a single frame.
+
+    Args:
+        frame (np.ndarray): The input video frame.
+        detector (YOLO): YOLO object detector.
+        tracker (DeepSORT): DeepSORT tracker instance.
+        pose_model (PoseModel): MediaPipe pose estimator.
+        feature_model (tf.keras.Model): Feature extractor model.
+
+    Returns:
+        np.ndarray: Annotated output frame.
+    """
     original_height, original_width = frame.shape[:2]
     downscale_width, downscale_height = 640, 360
     scale_x = original_width / downscale_width
