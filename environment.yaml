@@ -1,21 +1,4 @@
-name: TableTennisUmpire
+name: '{environment_name}'
 channels:
   - conda-forge
-dependencies:
-  - python=3.11  # Specify only the major and minor version
-  - pip
-  - bzip2
-  - ca-certificates
-  - libexpat
-  - libffi
-  - liblzma
-  - libsqlite
-  - libzlib
-  - ncurses
-  - openssl
-  - readline
-  - setuptools
-  - tk
-  - tzdata
-  - wheel
-  - opencv
+  - deep-sort-realtime

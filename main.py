@@ -1,18 +1,37 @@
 from read_webcam_stream import list_available_cameras, launch_webcam
-from table_detection import detect_table_top
+from pose_estimation import PoseEstimationWithTracking
 import cv2
 
 def process_frame(frame):
     """
-    Processes a single frame by detecting the table top.
+    Processes a single frame by performing pose estimation and tracking.
 
     Parameters:
         frame (numpy.ndarray): The input frame from the webcam.
 
     Returns:
-        numpy.ndarray: The processed frame with the table top detected.
+        numpy.ndarray: The processed frame with results drawn.
     """
-    return detect_table_top(frame)
+    # Initialize pose estimation and tracking
+    pose_tracker = PoseEstimationWithTracking("path/to/pose_model", "path/to/deepsort_model")
+
+    # Step 1: Perform pose estimation
+    poses = pose_tracker.estimate_poses(frame)
+
+    # Step 2: Extract bounding boxes from poses
+    bboxes = pose_tracker.extract_bounding_boxes(poses)
+
+    # Step 3: Perform tracking
+    tracked_objects = pose_tracker.track_objects(bboxes, frame)
+
+    # Step 4: Draw results (you can implement a helper function for this)
+    for obj in tracked_objects:
+        x1, y1, x2, y2, track_id = obj
+        cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (255, 0, 0), 2)
+        cv2.putText(frame, f"ID: {track_id}", (int(x1), int(y1) - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+
+    return frame
 
 def main():
     """
