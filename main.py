@@ -1,6 +1,26 @@
 from read_webcam_stream import list_available_cameras, launch_webcam
-from pose_estimation import PoseEstimationWithTracking
+from sorted_pose_detection.deep_sort_pose_estimation import run_pose_tracking
+from sorted_pose_detection.pose_model import PoseModel
+from sorted_pose_detection.deep_sort import DeepSORT
+from ultralytics import YOLO
+from tensorflow.keras.applications import MobileNetV3Small
+import tensorflow as tf
 import cv2
+
+# Initialize required models globally once
+pose_model = PoseModel()
+detector = YOLO("models/yolov5nu.pt")
+tracker = DeepSORT(max_age=30)
+
+base_model = MobileNetV3Small(
+    input_shape=(224, 224, 3),
+    include_top=False,
+    pooling='avg',
+    weights='imagenet',
+    include_preprocessing=False
+)
+x = tf.keras.layers.Dense(128, activation='relu')(base_model.output)
+feature_model = tf.keras.Model(inputs=base_model.input, outputs=x)
 
 def process_frame(frame):
     """
@@ -12,26 +32,7 @@ def process_frame(frame):
     Returns:
         numpy.ndarray: The processed frame with results drawn.
     """
-    # Initialize pose estimation and tracking
-    pose_tracker = PoseEstimationWithTracking("path/to/pose_model", "path/to/deepsort_model")
-
-    # Step 1: Perform pose estimation
-    poses = pose_tracker.estimate_poses(frame)
-
-    # Step 2: Extract bounding boxes from poses
-    bboxes = pose_tracker.extract_bounding_boxes(poses)
-
-    # Step 3: Perform tracking
-    tracked_objects = pose_tracker.track_objects(bboxes, frame)
-
-    # Step 4: Draw results (you can implement a helper function for this)
-    for obj in tracked_objects:
-        x1, y1, x2, y2, track_id = obj
-        cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (255, 0, 0), 2)
-        cv2.putText(frame, f"ID: {track_id}", (int(x1), int(y1) - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
-
-    return frame
+    return run_pose_tracking(frame, detector, tracker, pose_model, feature_model)
 
 def main():
     """
