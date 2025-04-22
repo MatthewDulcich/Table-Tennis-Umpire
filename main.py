@@ -1,20 +1,40 @@
 from read_webcam_stream import list_available_cameras, launch_webcam
-from table_detection import detect_table_top
+from sorted_pose_detection import DeepSORT, PoseModel, run_pose_tracking
+from ultralytics import YOLO
+from tensorflow.keras.applications import MobileNetV3Small
+import tensorflow as tf
 import cv2
+import numpy as np
+from typing import Any
 
-def process_frame(frame):
+# Initialize required models globally once
+pose_model = PoseModel()
+detector = YOLO("models/yolov5nu.pt")
+tracker = DeepSORT(max_age=30)
+
+base_model = MobileNetV3Small(
+    input_shape=(224, 224, 3),
+    include_top=False,
+    pooling='avg',
+    weights='imagenet',
+    include_preprocessing=False
+)
+x = tf.keras.layers.Dense(128, activation='relu')(base_model.output)
+feature_model = tf.keras.Model(inputs=base_model.input, outputs=x)
+
+def process_frame(frame: np.ndarray) -> np.ndarray:
     """
-    Processes a single frame by detecting the table top.
+    Processes a single frame by performing pose estimation and tracking.
 
     Parameters:
         frame (numpy.ndarray): The input frame from the webcam.
 
     Returns:
-        numpy.ndarray: The processed frame with the table top detected.
+        numpy.ndarray: The processed frame with results drawn.
     """
-    return detect_table_top(frame)
+    return run_pose_tracking(frame, detector, tracker, pose_model, feature_model)
 
-def main():
+def main() -> None:
     """
     Main function to list available cameras and launch the selected webcam.
     """

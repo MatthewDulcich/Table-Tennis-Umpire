@@ -1,2 +1,5 @@
 .DS_Store
 __pycache__/
+pose_landmarker_heavy.task
+pose_landmarker_lite.task
+yolov5nu.pt
