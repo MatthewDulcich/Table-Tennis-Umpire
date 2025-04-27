@@ -76,9 +76,11 @@ def main() -> None:
             print("Failed to open selected camera.")
             return
 
-        # Get the frame width and height from the camera
+        # Get the frame width, height, and FPS from the camera
         frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        fps = cap.get(cv2.CAP_PROP_FPS)  # Detect the camera's FPS
+        print(f"[INFO] Camera FPS: {fps}")
 
         # Initialize the video writer with the desired output FPS
         video_writer = cv2.VideoWriter(
