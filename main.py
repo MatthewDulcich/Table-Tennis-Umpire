@@ -6,6 +6,7 @@ import tensorflow as tf
 import cv2
 import numpy as np
 from typing import Any
+import os
 
 # Initialize required models globally once
 pose_model = PoseModel()
@@ -82,9 +83,21 @@ def main() -> None:
         fps = cap.get(cv2.CAP_PROP_FPS)  # Detect the camera's FPS
         print(f"[INFO] Camera FPS: {fps}")
 
+        # Ensure the output directory exists
+        output_dir = 'output_videos'
+        os.makedirs(output_dir, exist_ok=True)
+
+        # Generate a unique filename by incrementing a counter
+        counter = 1
+        while True:
+            output_file = os.path.join(output_dir, f'output_{counter}.mp4')
+            if not os.path.exists(output_file):
+                break
+            counter += 1
+
         # Initialize the video writer with the desired output FPS
         video_writer = cv2.VideoWriter(
-            'output.mp4',  # Output file name
+            output_file,  # Unique output file name
             cv2.VideoWriter_fourcc(*'mp4v'),  # Codec (e.g., 'mp4v' for MP4)
             OUTPUT_FPS,  # Desired frame rate for the output video
             (frame_width, frame_height)  # Frame size
