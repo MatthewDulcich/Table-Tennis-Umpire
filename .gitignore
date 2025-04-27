@@ -2,4 +2,5 @@
 __pycache__/
 pose_landmarker_heavy.task
 pose_landmarker_lite.task
-yolov5nu.ptoutput_videos/
+yolov5nu.pt
+output_videos/
