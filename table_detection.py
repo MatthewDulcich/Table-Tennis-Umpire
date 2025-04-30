@@ -3,6 +3,7 @@ import numpy as np
 
 # Global list to store selected points
 selected_points = []
+use_optical_flow = True  # Toggle between full flow and static points only
 
 def select_point(event, x, y, flags, param):
     if event == cv2.EVENT_LBUTTONDOWN and len(selected_points) < 4:
@@ -52,6 +53,7 @@ if features_to_track is None:
 
 # Save original corners
 quad_pts = np.array(selected_points, dtype=np.float32).reshape(-1, 1, 2)
+original_quad = quad_pts.copy()
 
 # Parameters for Lucas-Kanade Optical Flow
 lk_params = dict(
@@ -89,12 +91,14 @@ while cap.isOpened():
     motion_mask = motion < motion_threshold
     static_pts = valid_pts[motion_mask]
 
-    # Draw static points
-    for pt in static_pts:
-        x, y = pt.ravel()
-        cv2.circle(frame, (int(x), int(y)), 2, (0, 255, 0), -1)
+    # Determine which points to show
+    points_to_draw = valid_pts if use_optical_flow else static_pts
 
-    # Update tracked points or re-detect
+    for pt in points_to_draw:
+        x, y = pt.ravel()
+        color = (0, 255, 0) if not use_optical_flow else (255, 255, 0)
+        cv2.circle(frame, (int(x), int(y)), 2, color, -1)
+
     if static_pts.shape[0] > 0:
         features_to_track = static_pts.reshape(-1, 1, 2)
     else:
@@ -106,18 +110,29 @@ while cap.isOpened():
             print("Re-detection failed. Exiting.")
             break
 
-    # Track the 4 manually selected corners using optical flow
-    new_quad, quad_status, _ = cv2.calcOpticalFlowPyrLK(prev_gray, curr_gray, quad_pts, None, **lk_params)
-    if new_quad is not None and quad_status.sum() == 4:
-        quad_pts = new_quad
-        quad_int = quad_pts.astype(int)
+    # Track or fix the quadrilateral
+    if use_optical_flow:
+        new_quad, quad_status, _ = cv2.calcOpticalFlowPyrLK(prev_gray, curr_gray, quad_pts, None, **lk_params)
+        if new_quad is not None and quad_status.sum() == 4:
+            quad_pts = new_quad
+            quad_int = quad_pts.astype(int)
+            cv2.polylines(frame, [quad_int.reshape(-1, 2)], isClosed=True, color=(255, 0, 0), thickness=2)
+    else:
+        quad_int = original_quad.astype(int)
         cv2.polylines(frame, [quad_int.reshape(-1, 2)], isClosed=True, color=(255, 0, 0), thickness=2)
 
     prev_gray = curr_gray
 
-    cv2.imshow("Tracked Quadrilateral and Static Points", frame)
-    if cv2.waitKey(30) & 0xFF == ord('q'):
+    label = "Mode: Optical Flow" if use_optical_flow else "Mode: Static Only"
+    cv2.putText(frame, label, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+    cv2.imshow("Tracked Quadrilateral and Points", frame)
+
+    key = cv2.waitKey(30) & 0xFF
+    if key == ord('q'):
         break
+    elif key == ord('s'):
+        use_optical_flow = not use_optical_flow
+        print(f"Switched mode: {'Optical Flow' if use_optical_flow else 'Static Only'}")
 
 cap.release()
 cv2.destroyAllWindows()
