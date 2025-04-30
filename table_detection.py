@@ -1,68 +1,123 @@
 import cv2
 import numpy as np
 
-def detect_table_top(frame):
-    """
-    Detects the table top in a given frame and draws a rectangle around it.
+# Global list to store selected points
+selected_points = []
 
-    Parameters:
-        frame (numpy.ndarray): The input frame from the webcam.
+def select_point(event, x, y, flags, param):
+    if event == cv2.EVENT_LBUTTONDOWN and len(selected_points) < 4:
+        selected_points.append([x, y])
+        print(f"Selected Point {len(selected_points)}: ({x}, {y})")
 
-    Returns:
-        numpy.ndarray: The frame with the rectangle drawn around the detected table top.
-    """
-    # Convert to grayscale
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+# Load video
+video_path = 'output_videos/IMG_5152.MOV'
+cap = cv2.VideoCapture(video_path)
 
-    # Apply GaussianBlur to reduce noise
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+ret, first_frame = cap.read()
+if not ret:
+    print("Failed to read video.")
+    cap.release()
+    exit()
 
-    # Use Canny edge detection
-    edges = cv2.Canny(blurred, 50, 150)
+cv2.namedWindow("Select 4 Corners")
+cv2.setMouseCallback("Select 4 Corners", select_point)
 
-    # Find contours
-    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+while True:
+    temp = first_frame.copy()
+    for pt in selected_points:
+        cv2.circle(temp, tuple(pt), 5, (0, 0, 255), -1)
+    cv2.imshow("Select 4 Corners", temp)
+    if len(selected_points) == 4:
+        break
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        print("Selection cancelled.")
+        cap.release()
+        cv2.destroyAllWindows()
+        exit()
 
-    # Iterate through contours to find the table top
-    for contour in contours:
-        # Approximate the contour to a polygon
-        epsilon = 0.02 * cv2.arcLength(contour, True)
-        approx = cv2.approxPolyDP(contour, epsilon, True)
+cv2.destroyWindow("Select 4 Corners")
 
-        # Check if the polygon has 4 sides (rectangle)
-        if len(approx) == 4:
-            # Draw the contour on the original frame
-            cv2.drawContours(frame, [approx], -1, (0, 255, 0), 3)
+# Convert the first frame to grayscale
+prev_gray = cv2.cvtColor(first_frame, cv2.COLOR_BGR2GRAY)
 
-            # Draw a bounding box around the table
-            x, y, w, h = cv2.boundingRect(approx)
-            cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 0, 0), 2)
+# Detect good features to track
+features_to_track = cv2.goodFeaturesToTrack(
+    prev_gray, maxCorners=500, qualityLevel=0.01, minDistance=5, blockSize=7
+)
 
-            break  # Assuming there's only one table top to detect
+if features_to_track is None:
+    print("Could not detect features. Exiting.")
+    cap.release()
+    exit()
 
-    return frame
+# Save original corners
+quad_pts = np.array(selected_points, dtype=np.float32).reshape(-1, 1, 2)
 
-def segment_table_top(frame, lower_hsv, upper_hsv):
-    """
-    Segments the table top in a given frame using color-based segmentation.
+# Parameters for Lucas-Kanade Optical Flow
+lk_params = dict(
+    winSize=(21, 21),
+    maxLevel=3,
+    criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 30, 0.01),
+)
 
-    Parameters:
-        frame (numpy.ndarray): The input frame from the webcam.
-        lower_hsv (tuple): The lower HSV bounds for segmentation.
-        upper_hsv (tuple): The upper HSV bounds for segmentation.
+# Threshold for filtering moving points
+motion_threshold = 5.0
 
-    Returns:
-        numpy.ndarray: A binary mask where the table top is segmented.
-    """
-    # Convert the frame to HSV color space
-    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+# Process video
+while cap.isOpened():
+    ret, frame = cap.read()
+    if not ret:
+        break
 
-    # Create a binary mask based on the HSV range
-    mask = cv2.inRange(hsv, lower_hsv, upper_hsv)
+    curr_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    next_pts, status, _ = cv2.calcOpticalFlowPyrLK(prev_gray, curr_gray, features_to_track, None, **lk_params)
 
-    # Optional: Apply morphological operations to clean up the mask
-    kernel = np.ones((5, 5), np.uint8)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+    if next_pts is None or status is None or np.count_nonzero(status) < 10:
+        print("Too few points or tracking failed. Re-detecting features...")
+        features_to_track = cv2.goodFeaturesToTrack(
+            curr_gray, maxCorners=500, qualityLevel=0.01, minDistance=5, blockSize=7
+        )
+        if features_to_track is None:
+            print("Re-detection failed. Exiting.")
+            break
+        prev_gray = curr_gray
+        continue
 
-    return mask
+    valid_pts = next_pts[status.flatten() == 1].reshape(-1, 2)
+    prev_pts = features_to_track[status.flatten() == 1].reshape(-1, 2)
+    motion = np.linalg.norm(valid_pts - prev_pts, axis=1)
+    motion_mask = motion < motion_threshold
+    static_pts = valid_pts[motion_mask]
+
+    # Draw static points
+    for pt in static_pts:
+        x, y = pt.ravel()
+        cv2.circle(frame, (int(x), int(y)), 2, (0, 255, 0), -1)
+
+    # Update tracked points or re-detect
+    if static_pts.shape[0] > 0:
+        features_to_track = static_pts.reshape(-1, 1, 2)
+    else:
+        print("No static points left. Re-detecting features...")
+        features_to_track = cv2.goodFeaturesToTrack(
+            curr_gray, maxCorners=500, qualityLevel=0.01, minDistance=5, blockSize=7
+        )
+        if features_to_track is None:
+            print("Re-detection failed. Exiting.")
+            break
+
+    # Track the 4 manually selected corners using optical flow
+    new_quad, quad_status, _ = cv2.calcOpticalFlowPyrLK(prev_gray, curr_gray, quad_pts, None, **lk_params)
+    if new_quad is not None and quad_status.sum() == 4:
+        quad_pts = new_quad
+        quad_int = quad_pts.astype(int)
+        cv2.polylines(frame, [quad_int.reshape(-1, 2)], isClosed=True, color=(255, 0, 0), thickness=2)
+
+    prev_gray = curr_gray
+
+    cv2.imshow("Tracked Quadrilateral and Static Points", frame)
+    if cv2.waitKey(30) & 0xFF == ord('q'):
+        break
+
+cap.release()
+cv2.destroyAllWindows()
