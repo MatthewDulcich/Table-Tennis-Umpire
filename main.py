@@ -11,6 +11,7 @@ from ultralytics import YOLO
 from tensorflow.keras.applications import MobileNetV3Small
 import tensorflow as tf
 
+
 # Initialize required models globally once
 pose_model = PoseModel()
 detector = YOLO("models/yolov5nu.pt")
@@ -26,7 +27,7 @@ base_model = MobileNetV3Small(
 x = tf.keras.layers.Dense(128, activation='relu')(base_model.output)
 feature_model = tf.keras.Model(inputs=base_model.input, outputs=x)
 
-OUTPUT_FPS = 30  # Desired FPS for the output video
+OUTPUT_FPS = 15  # Desired FPS for the output video
 
 
 def process_frame_chunk(chunk):

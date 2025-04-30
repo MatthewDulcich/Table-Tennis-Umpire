@@ -85,6 +85,60 @@ def extract_features(images: np.ndarray, model: tf.keras.Model) -> np.ndarray:
     return model(images, training=False).numpy()
 
 
+def non_maximum_suppression_with_occlusion(boxes, scores, iou_threshold=0.5, occlusion_threshold=0.7):
+    """
+    Applies Non-Maximum Suppression (NMS) while accounting for occlusion.
+
+    Parameters:
+        boxes (numpy.ndarray): Array of bounding boxes (x1, y1, x2, y2).
+        scores (numpy.ndarray): Array of confidence scores for each box.
+        iou_threshold (float): IoU threshold for standard NMS.
+        occlusion_threshold (float): IoU threshold to retain overlapping boxes for occlusion.
+
+    Returns:
+        list: Indices of boxes to keep.
+    """
+    if len(boxes) == 0:
+        return []
+
+    # Convert boxes to float for calculations
+    boxes = boxes.astype(float)
+
+    # Compute the area of each box
+    areas = (boxes[:, 2] - boxes[:, 0] + 1) * (boxes[:, 3] - boxes[:, 1] + 1)
+
+    # Sort boxes by confidence scores in descending order
+    sorted_indices = np.argsort(scores)[::-1]
+
+    keep = []
+    while len(sorted_indices) > 0:
+        # Pick the box with the highest score
+        current = sorted_indices[0]
+        keep.append(current)
+
+        # Compute IoU of the current box with the rest
+        x1 = np.maximum(boxes[current, 0], boxes[sorted_indices[1:], 0])
+        y1 = np.maximum(boxes[current, 1], boxes[sorted_indices[1:], 1])
+        x2 = np.minimum(boxes[current, 2], boxes[sorted_indices[1:], 2])
+        y2 = np.minimum(boxes[current, 3], boxes[sorted_indices[1:], 3])
+
+        inter_area = np.maximum(0, x2 - x1 + 1) * np.maximum(0, y2 - y1 + 1)
+        iou = inter_area / (areas[current] + areas[sorted_indices[1:]] - inter_area)
+
+        # Suppress boxes with IoU > iou_threshold
+        suppressed_indices = np.where(iou > iou_threshold)[0]
+
+        # Retain overlapping boxes for occlusion if IoU > occlusion_threshold
+        for idx in suppressed_indices:
+            if iou[idx] > occlusion_threshold:
+                keep.append(sorted_indices[1:][idx])
+
+        # Remove processed indices
+        sorted_indices = np.delete(sorted_indices, np.concatenate(([0], suppressed_indices)))
+
+    return list(set(keep))  # Ensure unique indices
+
+
 def run_pose_tracking(
     frame: np.ndarray,
     detector: YOLO,
@@ -111,47 +165,69 @@ def run_pose_tracking(
     scale_y = original_height / downscale_height
     resized_frame = cv2.resize(frame, (downscale_width, downscale_height))
 
+    # Detect objects in the frame
     results = detector(resized_frame)[0]
     bboxes = []
+    scores = []
     for det in results.boxes.data.cpu().numpy():
         x1, y1, x2, y2, conf, cls = det
-        if int(cls) != 0:
+        if int(cls) != 0:  # Only process person class (class ID 0)
             continue
-        w, h = x2 - x1, y2 - y1
-        bboxes.append([x1 * scale_x, y1 * scale_y, w * scale_x, h * scale_y])
+        # Scale bounding box coordinates back to the original frame size
+        x1 = x1 * scale_x
+        y1 = y1 * scale_y
+        x2 = x2 * scale_x
+        y2 = y2 * scale_y
+        bboxes.append([x1, y1, x2, y2])
+        scores.append(conf)
 
-    if bboxes:
-        crops = extract_crops(frame, bboxes)
+    bboxes = np.array(bboxes)
+    scores = np.array(scores)
+
+    # Apply NMS with occlusion handling
+    if len(bboxes) > 0:
+        keep_indices = non_maximum_suppression_with_occlusion(bboxes, scores)
+        refined_bboxes = bboxes[keep_indices]
+        refined_scores = scores[keep_indices]
+
+        # Extract crops and features for refined bounding boxes
+        crops = extract_crops(frame, refined_bboxes)
         features = extract_features(crops, feature_model)
-        tracks = tracker.update(bboxes, features)
+
+        # Update the tracker with refined detections
+        tracks = tracker.update(refined_bboxes, features)
 
         for track, crop in zip(tracks, crops):
             if track.time_since_update > 0:
                 continue
 
             poses = pose_model.predict(crop)
-            x, y, w, h = map(int, track.get_bbox())
+            x1, y1, x2, y2 = map(int, track.get_bbox())
+            w, h = x2 - x1, y2 - y1
 
+            # Draw pose keypoints and connections
             for pose in poses:
                 keypoints = pose['keypoints']
                 connections = pose['connections']
 
                 for px, py, confidence in keypoints:
                     if confidence > 0.5:
-                        gx = int(px / 224 * w + x)
-                        gy = int(py / 224 * h + y)
+                        # Scale keypoints to the original frame size
+                        gx = int(px / 224 * w + x1)
+                        gy = int(py / 224 * h + y1)
                         cv2.circle(frame, (gx, gy), 5, (0, 255, 0), -1)
 
                 for start_idx, end_idx in connections:
                     if keypoints[start_idx][2] > 0.5 and keypoints[end_idx][2] > 0.5:
-                        x1 = int(keypoints[start_idx][0] / 224 * w + x)
-                        y1 = int(keypoints[start_idx][1] / 224 * h + y)
-                        x2 = int(keypoints[end_idx][0] / 224 * w + x)
-                        y2 = int(keypoints[end_idx][1] / 224 * h + y)
-                        cv2.line(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
+                        x1_conn = int(keypoints[start_idx][0] / 224 * w + x1)
+                        y1_conn = int(keypoints[start_idx][1] / 224 * h + y1)
+                        x2_conn = int(keypoints[end_idx][0] / 224 * w + x1)
+                        y2_conn = int(keypoints[end_idx][1] / 224 * h + y1)
+                        cv2.line(frame, (x1_conn, y1_conn), (x2_conn, y2_conn), (255, 0, 0), 2)
 
-            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-            cv2.putText(frame, f'ID: {track.id}', (x, y - 10),
+            # Draw bounding box
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.putText(frame, f'ID: {track.id}', (x1, y1 - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
     return frame
