@@ -11,7 +11,7 @@ def select_point(event, x, y, flags, param):
         print(f"Selected Point {len(selected_points)}: ({x}, {y})")
 
 # Load video
-video_path = 'output_videos/Untitled.mov'
+video_path = 'input_data/game_1.mp4'
 cap = cv2.VideoCapture(video_path)
 
 ret, first_frame = cap.read()
