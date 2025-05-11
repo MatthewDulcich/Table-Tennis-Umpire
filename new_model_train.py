@@ -185,6 +185,8 @@ def full_pipeline(video_path, input_json_path, output_video_path, output_json_pa
 # Example Usage
 folder = "./data/train/game_"
 for i in range(1,6):
+    if i == 2:
+        continue
     full_pipeline(
         video_path = folder + f"{i}.mp4",
         input_json_path = folder + f"{i}/ball_markup.json",
