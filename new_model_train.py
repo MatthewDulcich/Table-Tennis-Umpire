@@ -6,28 +6,33 @@ from tensorflow.keras import layers, models
 from tensorflow.keras.optimizers.schedules import ExponentialDecay
 import numpy as np
 
+scale_x, scale_y = 1, 1
+def extract_video_features(video_path):
+    cap = cv2.VideoCapture(video_path)
+    #check if video opened successfully
+    if not cap.isOpened():
+        raise ValueError(f"Could not open video file: {video_path}")
+    #extract video resolution and fps
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    return cap, width, height, fps
 '''
 Script to take a video and convert it to downsample size and save it
 The labels in the test files are also downsized
 '''
-def process_video_and_labels(video_path, input_json_path, output_video_path, output_json_path, target_size=(640, 360)):
+def process_video_and_labels(video_path, input_json_path, output_video_path, output_json_path, target_size=(320, 220)):
     #check if downsampled video exists
+    global scale_x, scale_y
+    #get original video properties
+    cap, original_width, original_height, fps = extract_video_features(video_path)
+    # get scaling from original to target size
+    scale_x = target_size[0] / original_width
+    scale_y = target_size[1] / original_height
     if not os.path.exists(output_video_path):
-        cap = cv2.VideoCapture(video_path)
-        #check if video opened successfully
-        if not cap.isOpened():
-            raise ValueError(f"Could not open video file: {video_path}")
-        #extract video resolution and fps
-        original_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        original_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        fps = cap.get(cv2.CAP_PROP_FPS)
         # Create video writer
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         out = cv2.VideoWriter(output_video_path, fourcc, fps, target_size)
-        # Calculate scaling factors
-        scale_x = target_size[0] / original_width
-        scale_y = target_size[1] / original_height
-
         while True:
             #extract video frames
             ret, frame = cap.read()
@@ -37,12 +42,9 @@ def process_video_and_labels(video_path, input_json_path, output_video_path, out
             resized = cv2.resize(frame, target_size)
             out.write(resized)
 
-        cap.release()
         out.release()
         print(f"Saved resized video to: {output_video_path}")
-    else:
-        scale_x = scale_y = 1  # Assume no resize if video already exists
-    
+    cap.release()
     #Check if dowmsampled labels exist
     if not os.path.exists(output_json_path):
         with open(input_json_path, 'r') as f:
@@ -62,7 +64,7 @@ def process_video_and_labels(video_path, input_json_path, output_video_path, out
 
 # Step 2: Define Dataset Class
 class BallTrackingDataset(tf.keras.utils.Sequence):
-    def __init__(self, video_path, label_json, batch_size=16, target_size=(224, 224)):
+    def __init__(self, video_path, label_json, batch_size=16, target_size=(320, 220)):
         self.cap = cv2.VideoCapture(video_path)
         self.labels = json.load(open(label_json))
         self.batch_size = batch_size
@@ -115,16 +117,49 @@ def create_ball_predictor_model(input_shape=(224, 224, 3)):
     model.compile(optimizer=optimizer, loss='mean_squared_error')
     return model
 
+
+def extract_specific_frames(video_path, frame_indices):
+    cap = cv2.VideoCapture(video_path)
+    extracted_frames = {}
+
+    if not cap.isOpened():
+        print("Error: Cannot open video.")
+        return extracted_frames
+
+    for index in frame_indices:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, index)
+        success, frame = cap.read()
+        if success:
+            extracted_frames[index] = frame
+        else:
+            print(f"Warning: Could not read frame {index}")
+
+    cap.release()
+    return extracted_frames
+
 # Step 4: Training
 def train_ball_predictor(video_path, label_json_path, model_save_path="ball_tracker_model.h5", batch_size=16, epochs=10):
     print("Creating dataset...")
-    dataset = BallTrackingDataset(video_path, label_json_path, batch_size=batch_size)
+    #dataset = BallTrackingDataset(video_path, label_json_path, batch_size=batch_size, target_size=(320, 220))
+    with open(label_json_path, 'r') as f:
+        data = json.load(f)
+    #print(data.values())
+    frames = list(map(int, data.keys()))
+    extracted_frames = extract_specific_frames(video_path, frames)
+    output = [list(coord.values()) for coord in data.values()]
     if os.path.exists(model_save_path):
+        print("LOADING EXISTING MODEL")
         model = tf.keras.models.load_model(model_save_path)
         print(f"Model loaded from {model_save_path}")
     else:
-        model = create_ball_predictor_model(input_shape=(640, 360, 3))
-    model.fit(dataset, epochs=epochs)
+        print("CREATING NEW MODEL")
+        model = create_ball_predictor_model(input_shape=(320, 220, 3))
+    print("Training model...")
+    # model.fit(dataset, epochs=epochs)
+    frames = np.array(list(extracted_frames.values()), dtype=np.float32) / 255.0
+    output = np.array(output, dtype=np.float32)
+    print(frames.shape)
+    model.fit(frames, output, epochs=epochs, batch_size=batch_size)
     model.save(model_save_path)
     print(f"Model saved to {model_save_path}")
 
@@ -135,7 +170,7 @@ def full_pipeline(video_path, input_json_path, output_video_path, output_json_pa
 
 # Example Usage
 folder = "./data/train/game_"
-for i in range(2,6):
+for i in range(1,5):
     full_pipeline(
         video_path = folder + f"{i}.mp4",
         input_json_path = folder + f"{i}/ball_markup.json",
