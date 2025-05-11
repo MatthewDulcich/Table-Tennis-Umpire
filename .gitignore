@@ -4,4 +4,4 @@ pose_landmarker_heavy.task
 pose_landmarker_lite.task
 yolov5nu.pt
 output_videos/
-input_data/
+input_data/data/
