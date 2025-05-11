@@ -19,6 +19,11 @@ def get_frames_set(ball_json, event_json):
     train_frames = set(event_data.keys()) & set(ball_data.keys())
     ball_data = {frame: ball_data[frame] for frame in train_frames}
     event_data = {frame: event_data[frame] for frame in train_frames}
+    print("EVENT DATA KEYS:", event_data.keys())
+    print("BALL DATA KEYS:", ball_data.keys())
+    print(f"Train frames: {len(train_frames)}")
+    print(f"Ball data: {len(ball_data)}")
+    print(f"Event data: {len(event_data)}")
     return train_frames, ball_data, event_data
 
 def crop_centered_with_padding(image, center, crop_size):
@@ -58,30 +63,46 @@ def crop_centered_with_padding(image, center, crop_size):
 
     return cropped_padded
 
+def extract_specific_frames(video_path, frame_indices):
+    cap = cv2.VideoCapture(video_path)
+    extracted_frames = {}
+
+    if not cap.isOpened():
+        print("Error: Cannot open video.")
+        return extracted_frames
+
+    for index in frame_indices:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, index)
+        success, frame = cap.read()
+        if success:
+            extracted_frames[index] = frame
+        else:
+            print(f"Warning: Could not read frame {index}")
+
+    cap.release()
+    return extracted_frames
+
 def data_preprocess(video_path, ball_json, event_json):
     # Step 1: Get frames set
     train_frames, ball_data, event_data = get_frames_set(ball_json, event_json)
     #print(f"Train frames: {len(train_frames)}")
-
-    # Step 2: Read video extract frames connecting input and output
-    cap = cv2.VideoCapture(video_path)
-    frames = []
-    for frame_num in range(len(train_frames)):
-        ret, frame = cap.read()
-        if not ret:
-            break
-        frames.append(frame)
-    cap.release()
-
+    train_frames = list(map(int, event_data.keys()))
+    print("HERE ARE THE TRAIN FRAMES")
+    #print(train_frames)
+    frames = extract_specific_frames(video_path, train_frames)
+    #print(frames)
+    print(f"Frames shape: {len(frames)}, {frames[44].shape}")
     # Step 3: Center crop frames
-    for i, frame in enumerate(frames):
-        frame_num = str(i)
-        if frame_num in ball_data and ball_data[frame_num] is not None:
-            center = (int(ball_data[frame_num]['x']), int(ball_data[frame_num]['y']))
-            cropped_frame = crop_centered_with_padding(frame, center, (320, 220))
-            frames[i] = cropped_frame
-    
-    return frames, ball_data, event_data
+    cropped_frames = []
+    print(ball_data)
+    for frame in frames:
+        print(frame)
+        frame_num = str(frame)
+        center = (int(ball_data[frame_num]['x']), int(ball_data[frame_num]['y']))
+        cropped_frame = crop_centered_with_padding(frames[frame], center, (320, 220))
+        cropped_frames.append(cropped_frame)
+    print("Frames all cropped around ball coordinate")
+    return cropped_frames, ball_data, event_data
 
 # Step 3: Model
 def create_event_predictor_model(input_shape=(224, 224, 3)):
@@ -106,6 +127,12 @@ def create_event_predictor_model(input_shape=(224, 224, 3)):
 # Step 4: Training
 def train_event_predictor(frames, event_data, model_save_path="ball_event_model.h5", batch_size=16, epochs=10):
     #dataset = BallTrackingDataset(video_path, label_json_path, batch_size=batch_size)
+    print("TRAIN EVENT PREDICTOR\n\n\n\n")
+    print(len(frames), len(event_data))
+    print(f"Frames shape: {frames[0].shape}")
+    frames = np.array(frames, dtype=np.float32) / 255.0
+    event_data = np.array(list(event_data.values()), dtype=np.float32)
+    print(f"Event data shape: {event_data[0].shape}")
     if os.path.exists(model_save_path):
         print("LOADING EXISTING MODEL")
         model = tf.keras.models.load_model(model_save_path)
@@ -123,7 +150,7 @@ def full_pipeline(video_path, ball_json_path, event_json_path):
     train_event_predictor(frames, event_data)
 
 folder = "./data/train/game_"
-for i in range(1,5):
+for i in range(1,6):
     full_pipeline(
         video_path = folder + f"{i}.mp4",
         ball_json_path = folder + f"{i}/ball_markup.json",
