@@ -201,6 +201,10 @@ def run_pose_tracking(
             if track.time_since_update > 0:
                 continue
 
+            # Preprocess crop for pose model
+            crop = (crop * 255).astype(np.uint8)  # Convert back to uint8 after normalization
+            crop = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)  # Convert to RGB
+
             poses = pose_model.predict(crop)
             x1, y1, x2, y2 = map(int, track.get_bbox())
             w, h = x2 - x1, y2 - y1
@@ -211,14 +215,14 @@ def run_pose_tracking(
                 connections = pose['connections']
 
                 for px, py, confidence in keypoints:
-                    if confidence > 0.5:
+                    if confidence > 0.3:  # Lower confidence threshold
                         # Scale keypoints to the original frame size
                         gx = int(px / 224 * w + x1)
                         gy = int(py / 224 * h + y1)
                         cv2.circle(frame, (gx, gy), 5, (0, 255, 0), -1)
 
                 for start_idx, end_idx in connections:
-                    if keypoints[start_idx][2] > 0.5 and keypoints[end_idx][2] > 0.5:
+                    if keypoints[start_idx][2] > 0.3 and keypoints[end_idx][2] > 0.3:
                         x1_conn = int(keypoints[start_idx][0] / 224 * w + x1)
                         y1_conn = int(keypoints[start_idx][1] / 224 * h + y1)
                         x2_conn = int(keypoints[end_idx][0] / 224 * w + x1)
