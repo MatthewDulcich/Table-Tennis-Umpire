@@ -115,9 +115,11 @@ def create_ball_predictor_TrackNet(input_shape=(224, 224, 3)):
     conv_17 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(bn_16)
     bn_17 = layers.BatchNormalization()(conv_17)
     sigconv=layers.Conv2D(64, (1, 1), activation='sigmoid', padding='same')(bn_17)
+    sig_=layers.Conv2D(64, (1, 1), activation='sigmoid', padding='same')(bn_17)
 
     #method for extracting coordinates
     conv18 = layers.Conv2D(32, (3, 3), activation='relu', padding='same')(sigconv)
+    conv18 = layers.Conv2D(32, (3, 3), activation='relu', padding='same')(outputs)
     conv19 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(conv18)
     conv20 = layers.Conv2D(128, (3, 3), activation='relu', padding='same')(conv19)
     pool3 = layers.GlobalAveragePooling2D()(conv20)
@@ -133,6 +135,7 @@ def create_ball_predictor_TrackNet(input_shape=(224, 224, 3)):
     # model.compile(optimizer=optimizer, loss='mean_squared_error')
     model = models.Model(inputs=inputs, outputs=outputs, name = "BallPredictor")
     model.compile(optimizer=optimizer, loss='mean_squared_error')
+    print(model.summary())
     return model
 
 # def create_ball_predictor_TrackNet(input_shape=(220, 320, 3)):
@@ -173,7 +176,7 @@ def create_ball_predictor_model(input_shape=(224, 224, 3)):
 def create_model_predictor(input_shape=(224, 224, 3)):
     inputs = tf.keras.Input(shape=input_shape)
     conv1 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(inputs)
-    
+
 def extract_specific_frames(video_path, frame_indices):
     cap = cv2.VideoCapture(video_path)
     extracted_frames = {}

@@ -5,7 +5,8 @@ import tensorflow as tf
 from tensorflow.keras import layers, models
 from tensorflow.keras.optimizers.schedules import ExponentialDecay
 import numpy as np
-from ball_event_train import crop_centered_with_padding
+from ball_event_train import crop_centered_with_padding, extract_specific_frames
+
 scale_x, scale_y = 1, 1
 def downsample_video(video_path, target_size=(320, 220)):
     global scale_x, scale_y
@@ -36,26 +37,30 @@ def downsample_video(video_path, target_size=(320, 220)):
 if __name__ == "__main__":
 
     file_name = input("Enter the path to the video file: ")
-    video_path = f"./{file_name}.mp4"
+    video_path = f"./data/test/{file_name}.mp4"
     #retrieve the models
     ball_track_model = tf.keras.models.load_model("tracknet_pre_model.keras")
     ball_event_model = tf.keras.models.load_model("ball_event_model.keras")
     target_size = (320, 220)
     while not os.path.exists(video_path):
         file_name = input("Enter the path to the video file: ")
-        video_path = f"./{file_name}.mp4"
+        video_path = f"./data/test/{file_name}.mp4"
     #extract the downsampled frames
-    down_frames, orig_frames = downsample_video(video_path, target_size)
+    #down_frames, orig_frames = downsample_video(video_path, target_size)
     ball_position = []
-    for i, frame in enumerate(down_frames):
-        pred_pos = ball_track_model.predict(np.expand_dims(frame, axis=0)/ 255.0)
-        print("Predicted position:")
-        print(pred_pos[0][0], pred_pos[0][1])
-        orig_x = int(float(pred_pos[0][0]) / float(scale_x))
-        orig_y = int(float(pred_pos[0][1]) / float(scale_y))
-        print(orig_x, orig_y)
-        ball_position.append((orig_x, orig_y))
-        print(ball_position[-1])
+    # for i, frame in enumerate(down_frames):
+    #     pred_pos = ball_track_model.predict(np.expand_dims(frame, axis=0)/ 255.0)
+    #     print("Predicted position:")
+    #     print(pred_pos[0][0], pred_pos[0][1])
+    #     orig_x = int(float(pred_pos[0][0]) / float(scale_x))
+    #     orig_y = int(float(pred_pos[0][1]) / float(scale_y))
+    #     print(orig_x, orig_y)
+    #     ball_position.append((orig_x, orig_y))
+    #     print(ball_position[-1])
+    
+    orig_frames = extract_specific_frames(video_path,)
+    with open(f"./data/test/{file_name}/ball_markup.json", "r") as f:
+        ball_position = json.load(f)
     
     cropped_frames = []
     for i, frame in enumerate(orig_frames):
@@ -63,20 +68,16 @@ if __name__ == "__main__":
         cropped_frame = crop_centered_with_padding(frame, (x, y), (320, 220))
         cropped_frames.append(cropped_frame)
     
-    # events = []
-    # for i, frame in enumerate(cropped_frames):
-    #     pred_event = ball_event_model.predict(np.expand_dims(frame, axis=0))
-    #     print(pred_event)
-    #     event = np.argmax(pred_event[0])
-    #     events.append(event)
-    #     print(events[-1])
-    
-    for i, frame in enumerate(orig_frames):
-        if i >100:
-            cv2.circle(frame, (int(ball_position[i][0]), int(ball_position[i][1])), 3, (0, 255, 0), 2)
-            cv2.imshow("Frame", frame)
-            cv2.waitKey(0)
-            cv2.destroyAllWindows()
+    events = []
+    for i, frame in enumerate(cropped_frames):
+        pred_event = ball_event_model.predict(np.expand_dims(frame, axis=0))
+        print(pred_event)
+        event = np.argmax(pred_event[0])
+        events.append(event)
+        print(events[-1])
+    # writer = cv2.VideoWriter("output.mp4", cv2.VideoWriter_fourcc(*'mp4v'), 30, target_size)
+    # for i, frame in enumerate(orig_frames):
+    #     writer.write(frame)
     
     # TODO: Replace with writing out to a video
     

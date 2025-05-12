@@ -25,8 +25,11 @@ with open(f"./data/test/{file_name}/ball_markup.json", 'r') as f:
     ball_data = json.load(f)
 
 frame_nums = list(map(int, ball_data.keys()))
-print(frame_nums)
-frames = extract_specific_frames(video_path, frame_nums[0:2])
+#print(frame_nums)
+num_of_frames = 10
+fps_out = 10
+
+frames = extract_specific_frames(video_path, frame_nums[0:num_of_frames])
 print("Frames extracted")
 # cv2.imshow("frame", frames[frame_nums[0]])
 # cv2.waitKey(0)
@@ -51,14 +54,9 @@ for i, frame in enumerate(cropped_frames):
     print(events[-1])
 
 
-def place_list_in_frame(img, arr, position=(50, 50), font=cv2.FONT_HERSHEY_SIMPLEX,
+def place_list_in_frame(img, text, position=(50, 50), font=cv2.FONT_HERSHEY_SIMPLEX,
                         font_scale=1, thickness=2, text_color=(0, 0, 0), bg_color=(255, 255, 255)):
-    if len(arr) != 3:
-        raise ValueError("Array must be of length 3")
-
-    # Convert list to string
-    text = f"[{', '.join(arr)}]"
-
+    
     # Get text size
     (text_width, text_height), _ = cv2.getTextSize(text, font, font_scale, thickness)
 
@@ -75,9 +73,11 @@ def place_list_in_frame(img, arr, position=(50, 50), font=cv2.FONT_HERSHEY_SIMPL
     cv2.putText(img, text, (x, y), font, font_scale, text_color, thickness)
 
     return img
-dest_video_path = f"./data/test/{file_name}/output.mp4"
-cap = cv2.VideoCapture(video_path)
-for i, frame in enumerate(cropped_frames):
+
+dest_video_path = f"./data/test/output.mp4"
+fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+out = cv2.VideoWriter(dest_video_path, fourcc, 10, target_size)
+for i, frame in enumerate(frames):
     # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     # resized = cv2.resize(frame, target_size)
     # orig_frames.append(frame)
@@ -85,6 +85,6 @@ for i, frame in enumerate(cropped_frames):
     # print(resized.shape)
     # count += 1
     frame = place_list_in_frame(frame, events[i], position=(10, 20))
-    
-    cv2.imshow("frame", frame)
-    cv2.waitKe
+    out.write(frame)
+print("Video path: ", dest_video_path)
+out.release()
