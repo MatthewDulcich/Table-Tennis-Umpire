@@ -21,7 +21,7 @@ def extract_video_features(video_path):
 Script to take a video and convert it to downsample size and save it
 The labels in the test files are also downsized
 '''
-def process_video_and_labels(video_path, input_json_path, output_video_path, output_json_path, target_size=(220, 320)):
+def process_video_and_labels(video_path, input_json_path, output_video_path, output_json_path, target_size=(320, 220)):
     #check if downsampled video exists
     global scale_x, scale_y
     #get original video properties
@@ -39,7 +39,7 @@ def process_video_and_labels(video_path, input_json_path, output_video_path, out
             if not ret:
                 break
             #resize video frames and write to output video
-            resized = cv2.resize(frame, target_size)
+            resized = cv2.resize(frame, target_size)  # target_size is (width, height)
             out.write(resized)
 
         out.release()
@@ -134,6 +134,20 @@ def create_ball_predictor_TrackNet(input_shape=(224, 224, 3)):
     model = models.Model(inputs=inputs, outputs=outputs, name = "BallPredictor")
     model.compile(optimizer=optimizer, loss='mean_squared_error')
     return model
+
+# def create_ball_predictor_TrackNet(input_shape=(220, 320, 3)):
+#     inputs = tf.keras.Input(shape=input_shape)
+#     x = layers.Conv2D(16, (3, 3), activation='relu', padding='same')(inputs)
+#     x = layers.MaxPooling2D()(x)
+#     x = layers.Conv2D(32, (3, 3), activation='relu', padding='same')(x)
+#     x = layers.GlobalAveragePooling2D()(x)
+#     x = layers.Dense(32, activation='relu')(x)
+#     outputs = layers.Dense(2)(x)  # Output (x, y) coordinates
+
+#     model = models.Model(inputs=inputs, outputs=outputs, name="BallPredictorTest")
+#     model.compile(optimizer='adam', loss='mean_squared_error')
+#     return model
+
 # Step 3: Model
 def create_ball_predictor_model(input_shape=(224, 224, 3)):
     inputs = tf.keras.Input(shape=input_shape)
@@ -188,6 +202,8 @@ def train_ball_predictor(video_path, label_json_path, model_save_path="ball_trac
     #print(data.values())
     frames = list(map(int, data.keys()))
     extracted_frames = extract_specific_frames(video_path, frames)
+    sample_frame = next(iter(extracted_frames.values()))
+    print("Frame shape example:", sample_frame.shape)  # Should be (220, 320, 3)
     output = [list(coord.values()) for coord in data.values()]
     # if os.path.exists(model_save_path):
     #     print("LOADING EXISTING MODEL")
