@@ -46,26 +46,49 @@ def build_model(input_shape: tuple = (224, 224, 3)) -> tf.keras.Model:
     return tf.keras.Model(inputs=base.input, outputs=x)
 
 
-def extract_crops(frame: np.ndarray, bboxes: list) -> np.ndarray:
+def extract_crops(frame: np.ndarray, bboxes: list, target_size: int = 224) -> np.ndarray:
     """
-    Crop and resize image patches based on bounding boxes.
+    Crop, resize, and pad image patches based on bounding boxes.
 
     Args:
         frame (np.ndarray): The full image frame.
-        bboxes (list): List of bounding boxes [x, y, w, h].
+        bboxes (list): List of bounding boxes [x1, y1, x2, y2].
+        target_size (int): The target size for the output crops (e.g., 224x224).
 
     Returns:
-        np.ndarray: Array of cropped and resized image patches.
+        np.ndarray: Array of cropped, resized, and padded image patches.
     """
     crops = []
-    for x, y, w, h in bboxes:
-        x, y, w, h = map(int, [x, y, w, h])
-        crop = frame[max(0, y):max(0, y + h), max(0, x):max(0, x + w)]
+    for x1, y1, x2, y2 in bboxes:
+        x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])
+        crop = frame[max(0, y1):max(0, y2), max(0, x1):max(0, x2)]
+
         if crop.size == 0:
-            crop = np.zeros((224, 224, 3), dtype=np.uint8)
+            # If the crop is empty, create a blank image
+            padded_crop = np.zeros((target_size, target_size, 3), dtype=np.uint8)
         else:
-            crop = cv2.resize(crop, (224, 224))
-        crops.append(crop)
+            # Get the original dimensions of the crop
+            h, w = crop.shape[:2]
+
+            # Calculate the scaling factor to fit within the target size
+            scale = min(target_size / w, target_size / h)
+            new_w, new_h = int(w * scale), int(h * scale)
+
+            # Resize the crop while maintaining aspect ratio
+            resized_crop = cv2.resize(crop, (new_w, new_h))
+
+            # Create a blank canvas of the target size
+            padded_crop = np.zeros((target_size, target_size, 3), dtype=np.uint8)
+
+            # Calculate padding to center the resized crop
+            pad_x = (target_size - new_w) // 2
+            pad_y = (target_size - new_h) // 2
+
+            # Place the resized crop onto the blank canvas
+            padded_crop[pad_y:pad_y + new_h, pad_x:pad_x + new_w] = resized_crop
+
+        crops.append(padded_crop)
+
     return np.array(crops)
 
 
@@ -208,26 +231,61 @@ def run_pose_tracking(
             poses = pose_model.predict(crop)
             x1, y1, x2, y2 = map(int, track.get_bbox())
             w, h = x2 - x1, y2 - y1
+            crop_width, crop_height = 224, 224
 
-            # Draw pose keypoints and connections
             for pose in poses:
-                keypoints = pose['keypoints']
-                connections = pose['connections']
+                keypoints = pose['keypoints']  # List of [x, y, confidence]
+                connections = pose['connections']  # List of (start_idx, end_idx)
 
+                # Validate keypoints and draw them
                 for px, py, confidence in keypoints:
-                    if confidence > 0.3:  # Lower confidence threshold
-                        # Scale keypoints to the original frame size
-                        gx = int(px / 224 * w + x1)
-                        gy = int(py / 224 * h + y1)
-                        cv2.circle(frame, (gx, gy), 5, (0, 255, 0), -1)
+                    if confidence > 0.5:  # Adjusted confidence threshold
+                        # Check if keypoints are normalized (assume [0, 1] range)
+                        if px <= 1.0 and py <= 1.0:
+                            # Keypoints are normalized, scale to crop dimensions
+                            px *= crop_width
+                            py *= crop_height
 
+                        # Calculate relative position within the bounding box
+                        relative_x = px / crop_width  # Relative x-coordinate (0 to 1)
+                        relative_y = py / crop_height  # Relative y-coordinate (0 to 1)
+
+                        # Rescale keypoints to the original frame using relative position
+                        gx = int(relative_x * w + x1)  # Scale x-coordinate
+                        gy = int(relative_y * h + y1)  # Scale y-coordinate
+
+                        # Debugging information
+                        # print(f"[DEBUG] Keypoint (px, py): ({px}, {py}), Relative (rel_x, rel_y): ({relative_x}, {relative_y}), Scaled (gx, gy): ({gx}, {gy}), Confidence: {confidence}")
+                        # print(f"[DEBUG] Bounding box (x1, y1, x2, y2): ({x1}, {y1}, {x2}, {y2}), Width: {w}, Height: {h}")
+
+                        # Ensure keypoints are within frame bounds
+                        if 0 <= gx < frame.shape[1] and 0 <= gy < frame.shape[0]:
+                            cv2.circle(frame, (gx, gy), 5, (0, 255, 0), -1)
+
+                # Validate connections and draw them
                 for start_idx, end_idx in connections:
-                    if keypoints[start_idx][2] > 0.3 and keypoints[end_idx][2] > 0.3:
-                        x1_conn = int(keypoints[start_idx][0] / 224 * w + x1)
-                        y1_conn = int(keypoints[start_idx][1] / 224 * h + y1)
-                        x2_conn = int(keypoints[end_idx][0] / 224 * w + x1)
-                        y2_conn = int(keypoints[end_idx][1] / 224 * h + y1)
-                        cv2.line(frame, (x1_conn, y1_conn), (x2_conn, y2_conn), (255, 0, 0), 2)
+                    if (
+                        keypoints[start_idx][2] > 0.5 and  # Confidence for start keypoint
+                        keypoints[end_idx][2] > 0.5       # Confidence for end keypoint
+                    ):
+                        # Calculate relative positions for connections
+                        rel_x1 = keypoints[start_idx][0] / crop_width
+                        rel_y1 = keypoints[start_idx][1] / crop_height
+                        rel_x2 = keypoints[end_idx][0] / crop_width
+                        rel_y2 = keypoints[end_idx][1] / crop_height
+
+                        # Rescale connections to the original frame
+                        x1_conn = int(rel_x1 * w + x1)
+                        y1_conn = int(rel_y1 * h + y1)
+                        x2_conn = int(rel_x2 * w + x1)
+                        y2_conn = int(rel_y2 * h + y1)
+
+                        # Ensure connections are within frame bounds
+                        if (
+                            0 <= x1_conn < frame.shape[1] and 0 <= y1_conn < frame.shape[0] and
+                            0 <= x2_conn < frame.shape[1] and 0 <= y2_conn < frame.shape[0]
+                        ):
+                            cv2.line(frame, (x1_conn, y1_conn), (x2_conn, y2_conn), (255, 0, 0), 2)
 
             # Draw bounding box
             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
