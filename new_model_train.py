@@ -21,31 +21,26 @@ def extract_video_features(video_path):
 Script to take a video and convert it to downsample size and save it
 The labels in the test files are also downsized
 '''
-def process_video_and_labels(video_path, input_json_path, output_video_path, output_json_path, target_size=(320, 220)):
-    #check if downsampled video exists
+def process_video_and_labels(video_path, input_json_path, output_video_path, output_json_path, target_size=(220, 320)):
+    """Process video and labels to resize frames and scale labels."""
     global scale_x, scale_y
-    #get original video properties
     cap, original_width, original_height, fps = extract_video_features(video_path)
-    # get scaling from original to target size
-    scale_x = target_size[0] / original_width
-    scale_y = target_size[1] / original_height
+    scale_x = target_size[1] / original_width  # Note: target_size[1] is width
+    scale_y = target_size[0] / original_height  # Note: target_size[0] is height
+
     if not os.path.exists(output_video_path):
-        # Create video writer
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        out = cv2.VideoWriter(output_video_path, fourcc, fps, target_size)
+        out = cv2.VideoWriter(output_video_path, fourcc, fps, (target_size[1], target_size[0]))  # OpenCV uses (width, height)
         while True:
-            #extract video frames
             ret, frame = cap.read()
             if not ret:
                 break
-            #resize video frames and write to output video
-            resized = cv2.resize(frame, target_size)
+            resized = cv2.resize(frame, (target_size[1], target_size[0]))  # OpenCV uses (width, height)
             out.write(resized)
-
         out.release()
         print(f"Saved resized video to: {output_video_path}")
     cap.release()
-    #Check if dowmsampled labels exist
+
     if not os.path.exists(output_json_path):
         with open(input_json_path, 'r') as f:
             data = json.load(f)
@@ -130,7 +125,8 @@ def create_ball_predictor_model(input_shape=(224, 224, 3)):
     return model
 
 
-def extract_specific_frames(video_path, frame_indices):
+def extract_specific_frames(video_path, frame_indices, target_size=(220, 320)):
+    """Extract specific frames from a video and resize them."""
     cap = cv2.VideoCapture(video_path)
     extracted_frames = {}
 
@@ -142,7 +138,9 @@ def extract_specific_frames(video_path, frame_indices):
         cap.set(cv2.CAP_PROP_POS_FRAMES, index)
         success, frame = cap.read()
         if success:
-            extracted_frames[index] = frame
+            resized_frame = cv2.resize(frame, (target_size[1], target_size[0]))  # OpenCV uses (width, height)
+            extracted_frames[index] = resized_frame
+            print(f"[DEBUG] Extracted frame {index} with shape: {resized_frame.shape}")  # Debug statement
         else:
             print(f"Warning: Could not read frame {index}")
 
@@ -151,14 +149,15 @@ def extract_specific_frames(video_path, frame_indices):
 
 # Step 4: Training
 def train_ball_predictor(video_path, label_json_path, model_save_path="ball_tracker_model.keras", batch_size=16, epochs=10):
-    print("Crgeating dataset...")
-    #dataset = BallTrackingDataset(video_path, label_json_path, batch_size=batch_size, target_size=(320, 220))
+    """Train the ball predictor model."""
+    print("Creating dataset...")
     with open(label_json_path, 'r') as f:
         data = json.load(f)
-    #print(data.values())
+
     frames = list(map(int, data.keys()))
     extracted_frames = extract_specific_frames(video_path, frames)
     output = [list(coord.values()) for coord in data.values()]
+
     if os.path.exists(model_save_path):
         print("LOADING EXISTING MODEL")
         model = tf.keras.models.load_model(model_save_path)
@@ -166,13 +165,13 @@ def train_ball_predictor(video_path, label_json_path, model_save_path="ball_trac
     else:
         print("CREATING NEW MODEL")
         model = create_ball_predictor_model(input_shape=(220, 320, 3))
+
     print("Training model...")
-    # model.fit(dataset, epochs=epochs)
     frames = np.array(list(extracted_frames.values()), dtype=np.float32) / 255.0
-    frames =tf.convert_to_tensor(frames)
+    print(f"[DEBUG] Frame dimensions before training: {frames.shape}")  # Debug statement
+    frames = tf.convert_to_tensor(frames)
     output = np.array(output, dtype=np.float32)
     output = tf.convert_to_tensor(output)
-    print(frames.shape)
     model.fit(frames, output, epochs=epochs, batch_size=batch_size)
     model.save(model_save_path)
     print(f"Model saved to {model_save_path}")
