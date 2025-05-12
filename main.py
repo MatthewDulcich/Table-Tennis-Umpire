@@ -12,6 +12,10 @@ import tensorflow as tf
 from queue import Queue
 from threading import Thread
 import atexit
+from tqdm import tqdm
+import logging
+
+logging.getLogger("ultralytics").setLevel(logging.WARNING)
 
 cv2.setNumThreads(0)
 
@@ -73,8 +77,9 @@ def stream_process_and_write(video_path, output_path, detector, tracker, pose_mo
     frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = cap.get(cv2.CAP_PROP_FPS) or OUTPUT_FPS
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))  # Total number of frames
 
-    print(f"[DEBUG] Video properties - Width: {frame_width}, Height: {frame_height}, FPS: {fps}")
+    print(f"[DEBUG] Video properties - Width: {frame_width}, Height: {frame_height}, FPS: {fps}, Total Frames: {total_frames}")
 
     writer = cv2.VideoWriter(
         output_path,
@@ -91,6 +96,9 @@ def stream_process_and_write(video_path, output_path, detector, tracker, pose_mo
     print("[INFO] Streaming frame-by-frame...")
     frame_count = 0
     batch = []
+
+    # Initialize tqdm progress bar
+    progress_bar = tqdm(total=total_frames, desc="Processing Video", unit="frame")
 
     try:
         while not interrupted:
@@ -109,36 +117,33 @@ def stream_process_and_write(video_path, output_path, detector, tracker, pose_mo
                 print("[INFO] Ctrl+G detected. Stopping gracefully...")
                 break
 
-            print(f"[DEBUG] Read frame {frame_count + 1} with shape: {frame.shape}")
             batch.append(frame)
 
             if len(batch) == batch_size:
-                print(f"[DEBUG] Processing batch of size {batch_size}")
                 processed_batch = [run_pose_tracking(f, detector, tracker, pose_model, feature_model) for f in batch]
                 for processed in processed_batch:
                     if processed.shape[:2] != (frame_height, frame_width):
-                        print(f"[WARNING] Resizing frame from {processed.shape[:2]} to ({frame_height}, {frame_width})")
                         processed = cv2.resize(processed, (frame_width, frame_height))
-                    print(f"[DEBUG] Writing processed frame {frame_count + 1}")
                     writer.write(processed)
                     frame_count += 1
+                    progress_bar.update(1)  # Update progress bar
                 batch = []
+
+        # Process remaining frames in the batch
+        if batch:
+            processed_batch = [run_pose_tracking(f, detector, tracker, pose_model, feature_model) for f in batch]
+            for processed in processed_batch:
+                if processed.shape[:2] != (frame_height, frame_width):
+                    processed = cv2.resize(processed, (frame_width, frame_height))
+                writer.write(processed)
+                frame_count += 1
+                progress_bar.update(1)  # Update progress bar
 
     except KeyboardInterrupt:
         print("[INFO] KeyboardInterrupt received. Processing any remaining frames before exit.")
 
     finally:
-        if batch:
-            print(f"[DEBUG] Finalizing remaining {len(batch)} frames...")
-            processed_batch = [run_pose_tracking(f, detector, tracker, pose_model, feature_model) for f in batch]
-            for processed in processed_batch:
-                if processed.shape[:2] != (frame_height, frame_width):
-                    print(f"[WARNING] Resizing frame from {processed.shape[:2]} to ({frame_height}, {frame_width})")
-                    processed = cv2.resize(processed, (frame_width, frame_height))
-                print(f"[DEBUG] Writing processed frame {frame_count + 1}")
-                writer.write(processed)
-                frame_count += 1
-
+        progress_bar.close()  # Close the progress bar
         print("[DEBUG] Releasing resources.")
         cap.release()
         writer.release()
@@ -173,9 +178,9 @@ def main():
             print("No video file selected. Exiting.")
             return
 
-        detector = YOLO("models/yolov5nu.pt")
+        detector = YOLO("models/yolov5nu.pt", verbose=False)
         pose_model = PoseModel()
-        tracker = DeepSORT(max_age=30)
+        tracker = DeepSORT(max_age=5760)
 
         base_model = MobileNetV3Small(
             input_shape=(224, 224, 3),
@@ -222,7 +227,7 @@ def main():
 
             detector = YOLO("models/yolov5nu.pt")
             pose_model = PoseModel()
-            tracker = DeepSORT(max_age=30)
+            tracker = DeepSORT(max_age=5760)
             base_model = MobileNetV3Small(
                 input_shape=(224, 224, 3),
                 include_top=False,

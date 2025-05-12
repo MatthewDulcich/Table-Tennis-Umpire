@@ -125,11 +125,43 @@ class DeepSORT:
     A multi-object tracker that uses Kalman filtering and appearance feature matching.
     """
 
-    def __init__(self, max_age: int = 30):
+    def __init__(self, max_age: int = 5760):
         self.kf = KalmanFilter()
         self.tracks: List[Track] = []
+        self.deleted_tracks: List[Track] = []  # Buffer for deleted tracks
         self.next_id = 0
         self.max_age = max_age
+
+    def delete_track(self, track: Track):
+        """
+        Move a track to the deleted tracks buffer.
+        """
+        self.deleted_tracks.append(track)
+        if len(self.deleted_tracks) > 50:  # Limit the size of the buffer
+            self.deleted_tracks.pop(0)
+
+    def reidentify(self, bbox: List[float], feature: np.ndarray) -> int:
+        """
+        Attempt to reassign an ID to a detection by comparing it with deleted tracks.
+
+        Parameters:
+            bbox (list): Detected bounding box.
+            feature (np.ndarray): Appearance feature of the detection.
+
+        Returns:
+            int: Reassigned track ID, or None if no match is found.
+        """
+        for track in self.deleted_tracks:
+        # Compare appearance features
+            similarity = np.dot(track.feature, feature) / (
+                np.linalg.norm(track.feature) * np.linalg.norm(feature) + 1e-6
+            )
+            # Apply a time decay factor
+            decay = max(0.5, 1 - 0.01 * track.time_since_update)  # Decay factor (0.5 minimum)
+            similarity *= decay
+            if similarity > 0.75:  # Adjusted threshold
+                return track.id
+        return None
 
     def update(self, bboxes: List[List[float]], features: List[np.ndarray]) -> List[Track]:
         """
@@ -166,8 +198,18 @@ class DeepSORT:
 
         for i in range(len(bboxes)):
             if i not in assigned_detections:
-                self.tracks.append(Track(self.next_id, bboxes[i], features[i], self.kf, max_age=self.max_age))
-                self.next_id += 1
+                # Attempt to reassign an ID
+                reassigned_id = self.reidentify(bboxes[i], features[i])
+                if reassigned_id is not None:
+                    # Reactivate the track
+                    track = next(t for t in self.deleted_tracks if t.id == reassigned_id)
+                    track.update(bboxes[i], features[i])
+                    self.tracks.append(track)
+                    self.deleted_tracks.remove(track)
+                else:
+                    # Create a new track if no reassignment is possible
+                    self.tracks.append(Track(self.next_id, bboxes[i], features[i], self.kf, max_age=self.max_age))
+                    self.next_id += 1
 
         self.tracks = [t for t in self.tracks if t.time_since_update <= t.max_age]
         return self.tracks
