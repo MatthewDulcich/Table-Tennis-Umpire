@@ -151,7 +151,7 @@ def extract_specific_frames(video_path, frame_indices):
 
 # Step 4: Training
 def train_ball_predictor(video_path, label_json_path, model_save_path="ball_tracker_model.keras", batch_size=16, epochs=10):
-    print("Crgeating dataset...")
+    print("Creating dataset...")
     #dataset = BallTrackingDataset(video_path, label_json_path, batch_size=batch_size, target_size=(320, 220))
     with open(label_json_path, 'r') as f:
         data = json.load(f)
@@ -183,13 +183,14 @@ def full_pipeline(video_path, input_json_path, output_video_path, output_json_pa
     train_ball_predictor(output_video_path, output_json_path)
 
 # Example Usage
-folder = "./data/train/game_"
-for i in range(1,6):
-    if i == 2:
-        continue
-    full_pipeline(
-        video_path = folder + f"{i}.mp4",
-        input_json_path = folder + f"{i}/ball_markup.json",
-        output_video_path = folder + f"{i}_down.mp4",
-        output_json_path = folder + f"{i}/ball_markup_down.json"
-    )
+if __name__ == "__main__":
+    folder = "./data/train/game_"
+    for i in range(1,6):
+        if i == 2:
+            continue
+        full_pipeline(
+            video_path = folder + f"{i}.mp4",
+            input_json_path = folder + f"{i}/ball_markup.json",
+            output_video_path = folder + f"{i}_down.mp4",
+            output_json_path = folder + f"{i}/ball_markup_down.json"
+        )

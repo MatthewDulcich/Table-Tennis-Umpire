@@ -146,13 +146,14 @@ def full_pipeline(video_path, ball_json_path, event_json_path):
     frames, ball_data, event_data = data_preprocess(video_path, ball_json_path, event_json_path)
     train_event_predictor(frames, event_data)
 
-folder = "./data/train/game_"
-for i in range(1,6):
-    if i == 2:
-        continue
-    full_pipeline(
-        video_path = folder + f"{i}.mp4",
-        ball_json_path = folder + f"{i}/ball_markup.json",
-        event_json_path = folder + f"{i}/events_markup.json"
-    )
+if __name__ == "__main__":
+    folder = "./data/train/game_"
+    for i in range(1,6):
+        if i == 2:
+            continue
+        full_pipeline(
+            video_path = folder + f"{i}.mp4",
+            ball_json_path = folder + f"{i}/ball_markup.json",
+            event_json_path = folder + f"{i}/events_markup.json"
+        )
 
