@@ -120,14 +120,14 @@ def create_event_predictor_model(input_shape=(224, 224, 3)):
     return model
 
 # Step 4: Training
-def train_event_predictor(frames, event_data, model_save_path="ball_event_model.h5", batch_size=16, epochs=10):
+def train_event_predictor(frames, event_data, model_save_path="ball_event_model.keras", batch_size=16, epochs=10):
     #dataset = BallTrackingDataset(video_path, label_json_path, batch_size=batch_size)
     # print("TRAIN EVENT PREDICTOR")
     # print(len(frames), len(event_data))
     # print(f"Frames shape: {frames[0].shape}")
 
     #convert to usable format
-    frames = np.array(frames, dtype=np.float32) / 255.0
+    frames = np.array(frames, dtype=np.float32)
     event_data = np.array(list(event_data.values()), dtype=np.float32)
     
     if os.path.exists(model_save_path):

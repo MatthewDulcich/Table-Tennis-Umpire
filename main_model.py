@@ -29,7 +29,7 @@ def downsample_video(video_path, target_size=(320, 220)):
         down_frames.append(resized)
         #print(resized.shape)
         count += 1
-    return frames, orig_frames
+    return down_frames, orig_frames
 
 
 if __name__ == "__main__":
@@ -70,4 +70,10 @@ if __name__ == "__main__":
         events.append(event)
         print(events[-1])
     
-
+    #Annotate original frames given some sample
+    # 100-200 frames of active gameplay
+    #evaluate the results
+    #Test video - on slides as backup
+    #OOF events
+    #Generalize to live footage - input as image from camera automatically update
+    #identify throughput and acceptable latency 
