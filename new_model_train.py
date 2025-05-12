@@ -62,53 +62,79 @@ def process_video_and_labels(video_path, input_json_path, output_video_path, out
             json.dump(scaled_data, f, indent=4)
         print(f"Saved scaled labels to: {output_json_path}")
 
-# # Step 2: Define Dataset Class
-# class BallTrackingDataset(tf.keras.utils.Sequence):
-#     def __init__(self, video_path, label_json, batch_size=16, target_size=(320, 220)):
-#         self.cap = cv2.VideoCapture(video_path)
-#         self.labels = json.load(open(label_json))
-#         self.batch_size = batch_size
-#         self.target_size = target_size
+def create_ball_predictor_TrackNet(input_shape=(224, 224, 3)):
+    inputs = tf.keras.Input(shape=input_shape)
+    conv_1 = layers.Conv2D(32, (3, 3), activation='relu', padding='same')(inputs),
+    bn = layers.BatchNormalization()(conv_1)
+    conv_2 = layers.Conv2D(32, (3, 3), activation='relu', padding='same')(bn)
+    bn_2 = layers.BatchNormalization()(conv_2)
 
-#         self.frames = []
-#         self.targets = []
-#         frame_num = 0
+    maxpool_1 = layers.MaxPooling2D()(bn_2)
+    conv_3 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(maxpool_1)
+    bn_3 = layers.BatchNormalization()(conv_3)
+    conv_4 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(bn_3)
+    bn_4 = layers.BatchNormalization()(conv_4)
 
-#         while True:
-#             ret, frame = self.cap.read()
-#             if not ret:
-#                 break
-#             resized = cv2.resize(frame, target_size)
-#             key = str(frame_num)
-#             if key in self.labels and self.labels[key] is not None:
-#                 self.frames.append(resized)
-#                 self.targets.append([self.labels[key]['x'], self.labels[key]['y']])
-#             frame_num += 1
+    maxpool_2 = layers.MaxPooling2D()(bn_4)
+    conv_5 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(maxpool_2)
+    bn_5 = layers.BatchNormalization()(conv_5)
+    conv_6 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(bn_5)
+    bn_6 = layers.BatchNormalization()(conv_6)
+    conv_7 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(bn_6)
+    bn_7 = layers.BatchNormalization()(conv_7)
 
-#         self.cap.release()
-#         self.frames = np.array(self.frames, dtype=np.float32) / 255.0
-#         self.targets = np.array(self.targets, dtype=np.float32)
+    maxpool_3 = layers.MaxPooling2D()(bn_7)
+    conv_8 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(maxpool_3)
+    bn_8 = layers.BatchNormalization()(conv_8)
+    conv_9 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(bn_8)
+    bn_9 = layers.BatchNormalization()(conv_9)
+    conv_10 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(bn_9)
+    bn_10 = layers.BatchNormalization()(conv_10)
+    upsample_1 = layers.UpSampling2D()(bn_10)
 
-#     def __len__(self):
-#         return int(np.ceil(len(self.frames) / self.batch_size))
-    
-#     def __getitem__(self, idx):
-#         start = idx * self.batch_size
-#         end = min((idx + 1) * self.batch_size, len(self.frames))
-#         return self.frames[start:end], self.targets[start:end]
+    concatenate_1 = layers.Concatenate()([upsample_1, bn_7])
+    conv_11 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(concatenate_1)
+    bn_11 = layers.BatchNormalization()(conv_11)
+    conv_12 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(bn_11)
+    bn_12 = layers.BatchNormalization()(conv_12) 
+    conv_13 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(bn_12)
+    bn_13 = layers.BatchNormalization()(conv_13)
+    upsample_2 = layers.UpSampling2D()(bn_13)
 
+    concatenate_2 = layers.Concatenate()([upsample_2, bn_4])
+    conv_14 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(concatenate_2)
+    bn_14 = layers.BatchNormalization()(conv_14)
+    conv_15 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(bn_14)
+    bn_15 = layers.BatchNormalization()(conv_15)
+    upsample_3 = layers.UpSampling2D()(bn_15)
+
+    concatenate_3 = layers.Concatenate()([upsample_3, bn_2])
+    conv_16 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(concatenate_3)
+    bn_16 = layers.BatchNormalization()(conv_16)
+    conv_17 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(bn_16)
+    bn_17 = layers.BatchNormalization()(conv_17)
+    outputs=layers.Conv1D(64, (1, 1), activation='sigmoid', padding='same')(bn_17)
+
+    #method for extracting coordinates
+    conv18 = layers.Conv2D(32, (3, 3), activation='relu', padding='same')(inputs)
+    conv19 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(conv18)
+    conv20 = layers.Conv2D(128, (3, 3), activation='relu', padding='same')(conv19)
+    pool3 = layers.GlobalAveragePooling2D()(conv20)
+    dense1 = layers.Dense(64, activation='relu')(pool3)
+    dense2 = layers.Dense(32, activation='relu')(dense1)
+    dense3 = layers.Dense(16, activation='relu')(dense2)
+    outputs = layers.Dense(2)(dense3)
+    lr_scheduler = ExponentialDecay(
+        initial_learning_rate=0.001,
+        decay_steps=100,
+        decay_rate=0.96)
+    optimizer = tf.keras.optimizers.Adam(learning_rate=lr_scheduler)
+    # model.compile(optimizer=optimizer, loss='mean_squared_error')
+    model = models.Model(inputs=inputs, outputs=outputs, name = "BallPredictor")
+    model.compile(optimizer=optimizer, loss='mean_squared_error')
+    return model
 # Step 3: Model
 def create_ball_predictor_model(input_shape=(224, 224, 3)):
-    # model = models.Sequential([
-    #     layers.Conv2D(32, (3, 3), activation='relu', padding='same', input_shape=input_shape),
-    #     layers.MaxPooling2D(),
-    #     layers.Conv2D(64, (3, 3), activation='relu', padding='same'),
-    #     layers.MaxPooling2D(),
-    #     layers.Conv2D(128, (3, 3), activation='relu', padding='same'),
-    #     layers.GlobalAveragePooling2D(),
-    #     layers.Dense(64, activation='relu'),
-    #     layers.Dense(2)  # x and y
-    # ])
     inputs = tf.keras.Input(shape=input_shape)
     conv1 = layers.Conv2D(32, (3, 3), activation='relu', padding='same')(inputs)
     pool1 = layers.MaxPooling2D()(conv1)
@@ -129,7 +155,10 @@ def create_ball_predictor_model(input_shape=(224, 224, 3)):
     model.compile(optimizer=optimizer, loss='mean_squared_error')
     return model
 
-
+def create_model_predictor(input_shape=(224, 224, 3)):
+    inputs = tf.keras.Input(shape=input_shape)
+    conv1 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(inputs)
+    
 def extract_specific_frames(video_path, frame_indices):
     cap = cv2.VideoCapture(video_path)
     extracted_frames = {}
@@ -150,7 +179,7 @@ def extract_specific_frames(video_path, frame_indices):
     return extracted_frames
 
 # Step 4: Training
-def train_ball_predictor(video_path, label_json_path, model_save_path="ball_tracker_model.keras", batch_size=16, epochs=10):
+def train_ball_predictor(video_path, label_json_path, model_save_path="ball_tracker_model.keras", trackNet_save_path = "tracknet_pre_model.keras", batch_size=16, epochs=5):
     print("Creating dataset...")
     #dataset = BallTrackingDataset(video_path, label_json_path, batch_size=batch_size, target_size=(320, 220))
     with open(label_json_path, 'r') as f:
@@ -159,22 +188,31 @@ def train_ball_predictor(video_path, label_json_path, model_save_path="ball_trac
     frames = list(map(int, data.keys()))
     extracted_frames = extract_specific_frames(video_path, frames)
     output = [list(coord.values()) for coord in data.values()]
-    if os.path.exists(model_save_path):
+    # if os.path.exists(model_save_path):
+    #     print("LOADING EXISTING MODEL")
+    #     model = tf.keras.models.load_model(model_save_path)
+    #     print(f"Model loaded from {model_save_path}")
+    # else:
+    #     print("CREATING NEW MODEL")
+    #     model = create_ball_predictor_model(input_shape=(220, 320, 3))
+
+    if os.path.exists(trackNet_save_path):
         print("LOADING EXISTING MODEL")
-        model = tf.keras.models.load_model(model_save_path)
-        print(f"Model loaded from {model_save_path}")
+        model_tracknet = tf.keras.models.load_model(trackNet_save_path)
+        print(f"Model loaded from {trackNet_save_path}")
     else:
         print("CREATING NEW MODEL")
-        model = create_ball_predictor_model(input_shape=(220, 320, 3))
+        model_tracknet = create_ball_predictor_model(input_shape=(220, 320, 3))
     print("Training model...")
     # model.fit(dataset, epochs=epochs)
     frames = np.array(list(extracted_frames.values()), dtype=np.float32) / 255.0
     frames =tf.convert_to_tensor(frames)
+    
     output = np.array(output, dtype=np.float32)
     output = tf.convert_to_tensor(output)
     print(frames.shape)
-    model.fit(frames, output, epochs=epochs, batch_size=batch_size)
-    model.save(model_save_path)
+    model_tracknet.fit(frames, output, epochs=epochs, batch_size=batch_size)
+    model_tracknet.save(model_save_path)
     print(f"Model saved to {model_save_path}")
 
 # Full Pipeline
