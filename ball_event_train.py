@@ -101,16 +101,20 @@ def data_preprocess(video_path, ball_json, event_json):
 
 # Step 3: Model
 def create_event_predictor_model(input_shape=(224, 224, 3)):
-    model = models.Sequential([
-        layers.Conv2D(32, (3, 3), activation='relu', padding='same', input_shape=input_shape),
-        layers.MaxPooling2D(),
-        layers.Conv2D(64, (3, 3), activation='relu', padding='same'),
-        layers.MaxPooling2D(),
-        layers.Conv2D(128, (3, 3), activation='relu', padding='same'),
-        layers.GlobalAveragePooling2D(),
-        layers.Dense(64, activation="softmax"),
-        layers.Dense(3)  # bounce, net, empty_event
-    ])
+    inputs = layers.Input(shape=input_shape)
+    conv1 = layers.Conv2D(320, (3, 3), activation='relu', padding='same')(inputs)
+    drop1= layers.Dropout(0.5)(conv1)
+    conv2 = layers.Conv2D(256, (3, 3), activation='relu', padding='same')(drop1)
+    drop2 = layers.Dropout(0.5)(conv2)
+    conv3 = layers.Conv2D(128, (3, 3), activation='relu', padding='same')(drop2)
+
+    # global_avg_pool = layers.GlobalAveragePooling2D()(conv3)
+    # dense1 = layers.Dense(64, activation="relu")(global_avg_pool)
+    flatten = layers.Flatten()(conv3)
+    dense1 = layers.Dense(64, activation="relu")(flatten)
+    
+    output = layers.Dense(3, activation="softmax")(dense1)
+    model = tf.keras.Model(inputs=inputs, outputs=output)
     lr_scheduler = ExponentialDecay(
         initial_learning_rate=0.001,
         decay_steps=100,
@@ -128,15 +132,19 @@ def train_event_predictor(frames, event_data, model_save_path="ball_event_model.
 
     #convert to usable format
     frames = np.array(frames, dtype=np.float32)
+    frames = tf.convert_to_tensor(frames)
     event_data = np.array(list(event_data.values()), dtype=np.float32)
-    
+    event_data = tf.convert_to_tensor(event_data)
+    print("Frames shape: ", frames.shape)
+    print("Event data shape: ", event_data.shape)
     if os.path.exists(model_save_path):
         print("LOADING EXISTING MODEL")
         model = tf.keras.models.load_model(model_save_path)
         print(f"Model loaded from {model_save_path}")
     else:
         print("CREATING NEW MODEL")
-        model = create_event_predictor_model(input_shape=(320, 220, 3))
+        model = create_event_predictor_model(input_shape=(220, 320, 3))
+    #print(model.summary())
     model.fit(frames, event_data, batch_size=batch_size, epochs=epochs)
     model.save(model_save_path)
     print(f"Model saved to {model_save_path}")
