@@ -33,7 +33,7 @@ def downsample_video(video_path, target_size=(320, 220)):
         count += 1
     return down_frames, orig_frames
 
-def place_list_in_frame(img, text, position=(50, 50), font=cv2.FONT_HERSHEY_SIMPLEX,
+def place_event_in_frame(img, text, position=(50, 50), font=cv2.FONT_HERSHEY_SIMPLEX,
                         font_scale=1, thickness=2, text_color=(0, 0, 0), bg_color=(255, 255, 255)):
     
     # Get text size
@@ -52,7 +52,6 @@ def place_list_in_frame(img, text, position=(50, 50), font=cv2.FONT_HERSHEY_SIMP
     cv2.putText(img, text, (x, y), font, font_scale, text_color, thickness)
 
     return img
-
 if __name__ == "__main__":
 
     file_name = input("Enter the path to the video file: ")
@@ -81,19 +80,18 @@ if __name__ == "__main__":
     # with open(f"./data/test/{file_name}/ball_markup.json", "r") as f:
     #     ball_position = json.load(f)
     
-    # cropped_frames = []
-    # for i, frame in enumerate(orig_frames):
-    #     x, y = ball_position[i]
-    #     cropped_frame = crop_centered_with_padding(frame, (x, y), (320, 220))
-    #     cropped_frames.append(cropped_frame)
-    
-    # events = []
-    # for i, frame in enumerate(cropped_frames):
-    #     pred_event = ball_event_model.predict(np.expand_dims(frame, axis=0))
-    #     print(pred_event)
-    #     event = np.argmax(pred_event[0])
-    #     events.append(event)
-    #     print(events[-1])
+    cropped_frames = []
+    events = []
+    event_labels = {0:"bounce", 1:"net", 2:"empty_event"}
+    for i, frame in enumerate(frames):
+        x, y = ball_position[i]
+        cropped_frame = crop_centered_with_padding(frame, (x, y), (320, 220))
+        cropped_frames.append(cropped_frame)
+        pred_event = ball_event_model.predict(np.expand_dims(cropped_frame, axis=0))
+        #print(pred_event)
+        event = np.argmax(pred_event[0])
+        events.append(event_labels[event])
+        #print(events[-1])
     # writer = cv2.VideoWriter("output.mp4", cv2.VideoWriter_fourcc(*'mp4v'), 30, target_size)
     # for i, frame in enumerate(orig_frames):
     #     writer.write(frame)
@@ -115,8 +113,9 @@ if __name__ == "__main__":
         # print(resized.shape)
         # count += 1
         # text= f"({int(ball_position[i][0])}, {int(ball_position[i][1])})"
-        # frame = place_list_in_frame(frame, text, position=(10, 20))
+        frame = place_event_in_frame(frame, events[i], position=(10, 20))
         cv2.circle(frame, (int(ball_position[i][0]), int(ball_position[i][1])), 5, (0, 255, 0), -1)
+
         out.write(frame)
     print("Video path: ", dest_video_path)
     out.release()

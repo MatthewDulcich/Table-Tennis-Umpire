@@ -6,6 +6,7 @@ from tkinter import Tk
 from tkinter.filedialog import askopenfilename
 from read_webcam_stream import list_available_cameras
 from sorted_pose_detection import DeepSORT, PoseModel, run_pose_tracking
+from ball_event_train import crop_centered_with_padding, extract_specific_frames
 from ultralytics import YOLO
 from tensorflow.keras.applications import MobileNetV3Small
 import tensorflow as tf
@@ -165,6 +166,51 @@ def get_unique_filename(output_dir, base_name, extension):
         counter += 1
 
 
+scale_x, scale_y = 1, 1
+def downsample_video(cap, target_size=(320, 220)):
+    global scale_x, scale_y
+    # Create video writer
+    scale_x = target_size[0] / cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+    scale_y = target_size[1] / cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+    print(scale_x, scale_y)
+    ret = True
+    down_frames = []
+    orig_frames =[]
+    count = 0
+    while ret and count < 1000:
+        # Extract video frames
+        ret, frame = cap.read()
+        if not ret:
+            break
+        # Resize video frames and write to output video
+        #frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        resized = cv2.resize(frame, target_size)
+        orig_frames.append(frame)
+        down_frames.append(resized)
+        #print(resized.shape)
+        count += 1
+    return down_frames, orig_frames
+
+def place_event_in_frame(img, text, position=(50, 50), font=cv2.FONT_HERSHEY_SIMPLEX,
+                        font_scale=1, thickness=2, text_color=(0, 0, 0), bg_color=(255, 255, 255)):
+    
+    # Get text size
+    (text_width, text_height), _ = cv2.getTextSize(text, font, font_scale, thickness)
+
+    # Define rectangle coordinates
+    x, y = position
+    top_left = (x - 10, y - text_height - 10)
+    bottom_right = (x + text_width + 10, y + 10)
+
+    # Draw background rectangle
+    cv2.rectangle(img, top_left, bottom_right, bg_color, -1)
+    cv2.rectangle(img, top_left, bottom_right, (0, 0, 0), 2)  # frame border
+
+    # Put the text on top of the rectangle
+    cv2.putText(img, text, (x, y), font, font_scale, text_color, thickness)
+
+    return img
+
 def main():
     parser = argparse.ArgumentParser(description="Process webcam or video input.")
     parser.add_argument("--video", action="store_true", help="Process a video file instead of the webcam.")
@@ -252,14 +298,45 @@ def main():
 
             cv2.namedWindow("Processed Frame", cv2.WINDOW_NORMAL)
             interrupted = False
-
+            ball_track_model = tf.keras.models.load_model("ball_tracker_model.keras")
+            ball_event_model = tf.keras.models.load_model("ball_event_model.keras")
+            target_size = (320, 220)
             while True:
                 ret, frame = cap.read()
                 if not ret:
                     print("[ERROR] Failed to read frame from camera.")
                     break
-
+                #Pose prediction
                 processed_frame = run_pose_tracking(frame, detector, tracker, pose_model, feature_model)
+
+                #Ball tracking model pipeline
+                down_frames, frames = downsample_video(video_path, target_size)
+                ball_position = []
+                for i, frame in enumerate(down_frames):
+                    pred_pos = ball_track_model.predict(np.expand_dims(frame, axis=0)/ 255.0)
+                    print("Predicted position:")
+                    orig_x = int(float(pred_pos[0][0]) / float(scale_x))
+                    orig_y = int(float(pred_pos[0][1]) / float(scale_y))
+                    print(orig_x, orig_y)
+                    ball_position.append((orig_x, orig_y))
+                    #print(ball_position[-1])
+                
+                #Ball event prediciton pipeline
+                cropped_frames = []
+                events = []
+                event_labels = {0:"bounce", 1:"net", 2:"empty_event"}
+                for i, frame in enumerate(frames):
+                    x, y = ball_position[i]
+                    cropped_frame = crop_centered_with_padding(frame, (x, y), (320, 220))
+                    cropped_frames.append(cropped_frame)
+                    pred_event = ball_event_model.predict(np.expand_dims(cropped_frame, axis=0))
+                    #print(pred_event)
+                    event = np.argmax(pred_event[0])
+                    events.append(event_labels[event])
+                    
+                    #Write the event label and the ball track dot into pose detection frame
+                    processed_frame = place_event_in_frame(processed_frame, events[i], position=(10, 20))
+                    cv2.circle(processed_frame, (int(ball_position[i][0]), int(ball_position[i][1])), 5, (0, 255, 0), -1)
                 cv2.imshow("Processed Frame", processed_frame)
                 video_writer.write(processed_frame)
 
