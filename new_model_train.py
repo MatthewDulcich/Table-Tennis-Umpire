@@ -115,11 +115,9 @@ def create_ball_predictor_TrackNet(input_shape=(224, 224, 3)):
     conv_17 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(bn_16)
     bn_17 = layers.BatchNormalization()(conv_17)
     sigconv=layers.Conv2D(64, (1, 1), activation='sigmoid', padding='same')(bn_17)
-    sig_=layers.Conv2D(64, (1, 1), activation='sigmoid', padding='same')(bn_17)
 
     #method for extracting coordinates
     conv18 = layers.Conv2D(32, (3, 3), activation='relu', padding='same')(sigconv)
-    conv18 = layers.Conv2D(32, (3, 3), activation='relu', padding='same')(outputs)
     conv19 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(conv18)
     conv20 = layers.Conv2D(128, (3, 3), activation='relu', padding='same')(conv19)
     pool3 = layers.GlobalAveragePooling2D()(conv20)
@@ -197,7 +195,7 @@ def extract_specific_frames(video_path, frame_indices):
     return extracted_frames
 
 # Step 4: Training
-def train_ball_predictor(video_path, label_json_path, model_save_path="ball_tracker_model.keras", trackNet_save_path = "tracknet_pre_model.keras", batch_size=16, epochs=1):
+def train_ball_predictor(video_path, label_json_path, model_save_path="ball_tracker_model.keras", trackNet_save_path = "tracknet_pre_model.keras", batch_size=16, epochs=3):
     print("Creating dataset...")
     #dataset = BallTrackingDataset(video_path, label_json_path, batch_size=batch_size, target_size=(320, 220))
     with open(label_json_path, 'r') as f:
