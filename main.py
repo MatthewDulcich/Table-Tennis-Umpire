@@ -68,7 +68,7 @@ class VideoStreamReader:
         self.cap.release()
 
 
-def stream_process_and_write(video_path, output_path, detector, tracker, pose_model, feature_model, batch_size=8, quad_pts=None):
+def stream_process_and_write(video_path, output_path, detector, tracker, pose_model, feature_model, batch_size=8, quad_pts=None, flow_state=None):
     global cap, writer
     print(f"[DEBUG] Opening video file: {video_path}")
     cap = cv2.VideoCapture(video_path)
@@ -101,6 +101,19 @@ def stream_process_and_write(video_path, output_path, detector, tracker, pose_mo
     # Initialize tqdm progress bar
     progress_bar = tqdm(total=total_frames, desc="Processing Video", unit="frame")
 
+    # Parameters for Lucas-Kanade Optical Flow
+    lk_params = dict(
+        winSize=(21, 21),
+        maxLevel=3,
+        criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 30, 0.01),
+    )
+
+    prev_gray = None
+    if flow_state and flow_state.get("use_optical_flow", False):
+        ret, first_frame = cap.read()
+        if ret:
+            prev_gray = cv2.cvtColor(first_frame, cv2.COLOR_BGR2GRAY)
+
     try:
         while not interrupted:
             ret, frame = cap.read()
@@ -114,6 +127,13 @@ def stream_process_and_write(video_path, output_path, detector, tracker, pose_mo
 
             # If table corners are provided, draw the quadrilateral
             if quad_pts is not None:
+                if flow_state and flow_state.get("use_optical_flow", False) and prev_gray is not None:
+                    curr_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                    new_quad, quad_status, _ = cv2.calcOpticalFlowPyrLK(prev_gray, curr_gray, quad_pts, None, **lk_params)
+                    if new_quad is not None and quad_status.sum() == 4:
+                        quad_pts = new_quad
+                    prev_gray = curr_gray
+
                 quad_int = quad_pts.astype(int)
                 cv2.polylines(frame, [quad_int.reshape(-1, 2)], isClosed=True, color=(255, 0, 0), thickness=2)
 
@@ -122,6 +142,13 @@ def stream_process_and_write(video_path, output_path, detector, tracker, pose_mo
             if key == 7:  # ASCII code for Ctrl+G
                 print("[INFO] Ctrl+G detected. Stopping gracefully...")
                 break
+            elif key == ord('s') and flow_state is not None:
+                flow_state["use_optical_flow"] = not flow_state["use_optical_flow"]
+                print(f"[INFO] Toggled mode: {'Optical Flow' if flow_state['use_optical_flow'] else 'Static Only'}")
+
+                # Initialize prev_gray if optical flow just got enabled
+                if flow_state["use_optical_flow"]:
+                    prev_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
             batch.append(frame)
 
@@ -174,6 +201,7 @@ def get_unique_filename(output_dir, base_name, extension):
 def main():
     parser = argparse.ArgumentParser(description="Process webcam or video input.")
     parser.add_argument("--video", action="store_true", help="Process a video file instead of the webcam.")
+    parser.add_argument("--opticalflow", action="store_true", help="Enable optical flow for video processing.")
     args = parser.parse_args()
 
     if args.video:
@@ -209,7 +237,18 @@ def main():
         output_dir = 'output_videos'
         os.makedirs(output_dir, exist_ok=True)
         output_file = get_unique_filename(output_dir, "processed_output", ".mp4")
-        stream_process_and_write(video_path, output_file, detector, tracker, pose_model, feature_model, quad_pts=quad_pts)
+
+        flow_state = {"use_optical_flow": args.opticalflow}
+        stream_process_and_write(
+            video_path,
+            output_file,
+            detector,
+            tracker,
+            pose_model,
+            feature_model,
+            quad_pts=quad_pts,
+            flow_state=flow_state
+        )
         print(f"[INFO] Processed video saved to: {output_file}")
 
     else:
@@ -235,11 +274,21 @@ def main():
                 print("Failed to open selected camera.")
                 return
 
+            print("[INFO] Waiting for a valid frame from the webcam...")
+
+            # Wait until a valid frame (not black) is captured
+            while True:
+                ret, first_frame = cap.read()
+                if not ret:
+                    print("[ERROR] Failed to read from webcam. Retrying...")
+                    continue
+
+                # Check if the frame is not black (average pixel intensity > threshold)
+                if np.mean(first_frame) > 10:  # Threshold for non-black frame
+                    print("[INFO] Valid frame detected.")
+                    break
+
             # Select table corners for webcam
-            ret, first_frame = cap.read()
-            if not ret:
-                print("Failed to read from webcam.")
-                return
             quad_pts = select_corners(first_frame)
             if quad_pts is None:
                 return
@@ -271,30 +320,16 @@ def main():
                 (frame_width, frame_height)
             )
 
+            # Initialize optical flow state
+            flow_state = {"use_optical_flow": False}  # Default to static mode
+
             print("[INFO] Press Ctrl+G in the webcam preview window to stop.")
+            print("[INFO] Press 's' to toggle between Static and Optical Flow modes.")
 
             cv2.namedWindow("Processed Frame", cv2.WINDOW_NORMAL)
-            interrupted = False
 
-            while True:
-                ret, frame = cap.read()
-                if not ret:
-                    print("[ERROR] Failed to read frame from camera.")
-                    break
-
-                # Draw table quadrilateral
-                if quad_pts is not None:
-                    quad_int = quad_pts.astype(int)
-                    cv2.polylines(frame, [quad_int.reshape(-1, 2)], isClosed=True, color=(255, 0, 0), thickness=2)
-
-                processed_frame = run_pose_tracking(frame, detector, tracker, pose_model, feature_model)
-                cv2.imshow("Processed Frame", processed_frame)
-                video_writer.write(processed_frame)
-
-                key = cv2.waitKey(1) & 0xFF
-                if key == 7:  # Ctrl+G
-                    print("[INFO] Ctrl+G detected. Stopping webcam recording...")
-                    break
+            # Process the video with table detection
+            process_video(cap, first_frame, quad_pts, flow_state)
 
             cap.release()
             video_writer.release()

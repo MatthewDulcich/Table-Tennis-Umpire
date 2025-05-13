@@ -39,8 +39,9 @@ def select_corners(first_frame):
     cv2.destroyWindow("Select 4 Corners")
     return np.array(selected_points, dtype=np.float32).reshape(-1, 1, 2)
 
-def process_video(cap, first_frame, quad_pts, use_optical_flow=False):
+def process_video(cap, first_frame, quad_pts, flow_state):
     """Process the video to track points and quadrilateral."""
+    use_optical_flow = flow_state["use_optical_flow"]  # Get the initial state
     prev_gray = cv2.cvtColor(first_frame, cv2.COLOR_BGR2GRAY)
 
     # Detect good features to track
@@ -131,6 +132,7 @@ def process_video(cap, first_frame, quad_pts, use_optical_flow=False):
             break
         elif key == ord('s'):
             use_optical_flow = not use_optical_flow
+            flow_state["use_optical_flow"] = use_optical_flow  # Update the state
             print(f"Switched mode: {'Optical Flow' if use_optical_flow else 'Static Only'}")
 
     cap.release()
@@ -146,7 +148,8 @@ def main():
     if quad_pts is None:
         return
 
-    process_video(cap, first_frame, quad_pts)
+    flow_state = {"use_optical_flow": False}
+    process_video(cap, first_frame, quad_pts, flow_state)
 
 if __name__ == "__main__":
     main()
