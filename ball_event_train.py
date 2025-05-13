@@ -108,10 +108,10 @@ def create_event_predictor_model(input_shape=(224, 224, 3)):
     drop2 = layers.Dropout(0.5)(conv2)
     conv3 = layers.Conv2D(128, (3, 3), activation='relu', padding='same')(drop2)
 
-    # global_avg_pool = layers.GlobalAveragePooling2D()(conv3)
-    # dense1 = layers.Dense(64, activation="relu")(global_avg_pool)
-    flatten = layers.Flatten()(conv3)
-    dense1 = layers.Dense(64, activation="relu")(flatten)
+    global_avg_pool = layers.GlobalAveragePooling2D()(conv3)
+    dense1 = layers.Dense(64, activation="relu")(global_avg_pool)
+    # flatten = layers.Flatten()(conv3)
+    # dense1 = layers.Dense(64, activation="relu")(flatten)
     
     output = layers.Dense(3, activation="softmax")(dense1)
     model = tf.keras.Model(inputs=inputs, outputs=output)
@@ -124,7 +124,7 @@ def create_event_predictor_model(input_shape=(224, 224, 3)):
     return model
 
 # Step 4: Training
-def train_event_predictor(frames, event_data, model_save_path="ball_event_model.keras", batch_size=16, epochs=10):
+def train_event_predictor(frames, event_data, model_save_path="ball_event_model.keras", batch_size=10, epochs=10):
     #dataset = BallTrackingDataset(video_path, label_json_path, batch_size=batch_size)
     # print("TRAIN EVENT PREDICTOR")
     # print(len(frames), len(event_data))
