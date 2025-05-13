@@ -152,9 +152,39 @@ def stream_process_and_write(video_path, output_path, detector, tracker, pose_mo
                     prev_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
             batch.append(frame)
-
+            ball_track_model = tf.keras.models.load_model("ball_tracker_model.keras")
+            ball_event_model = tf.keras.models.load_model("ball_event_model.keras")
+            target_size = (320, 220)
             if len(batch) == batch_size:
                 processed_batch = [run_pose_tracking(f, detector, tracker, pose_model, feature_model) for f in batch]
+                #Ball tracking model pipeline
+                down_frames, frames = downsample_frames(batch, target_size, (frame_width, frame_height))
+                ball_position = []
+                for i, frame in enumerate(down_frames):
+                    pred_pos = ball_track_model.predict(np.expand_dims(frame, axis=0)/ 255.0)
+                    print("Predicted position:")
+                    orig_x = int(float(pred_pos[0][0]) / float(scale_x))
+                    orig_y = int(float(pred_pos[0][1]) / float(scale_y))
+                    print(orig_x, orig_y)
+                    ball_position.append((orig_x, orig_y))
+                    #print(ball_position[-1])
+                
+                #Ball event prediciton pipeline
+                cropped_frames = []
+                events = []
+                event_labels = {0:"bounce", 1:"net", 2:"empty_event"}
+                for i, frame in enumerate(frames):
+                    x, y = ball_position[i]
+                    cropped_frame = crop_centered_with_padding(frame, (x, y), (320, 220))
+                    cropped_frames.append(cropped_frame)
+                    pred_event = ball_event_model.predict(np.expand_dims(cropped_frame, axis=0))
+                    #print(pred_event)
+                    event = np.argmax(pred_event[0])
+                    events.append(event_labels[event])
+                    
+                    #Write the event label and the ball track dot into pose detection frame
+                    processed_batch[i] = place_event_in_frame(processed_batch[i], events[i], position=(10, 20))
+                    cv2.circle(processed_batch[i], (int(ball_position[i][0]), int(ball_position[i][1])), 5, (0, 255, 0), -1)
                 for processed in processed_batch:
                     if processed.shape[:2] != (frame_height, frame_width):
                         processed = cv2.resize(processed, (frame_width, frame_height))
@@ -198,6 +228,22 @@ def get_unique_filename(output_dir, base_name, extension):
             return file_path
         counter += 1
 
+def downsample_frames(frames, target_size=(320, 220), frame_dims):
+    global scale_x, scale_y
+    # Create video writer
+    scale_x = target_size[0] / frame_dims[0]
+    scale_y = target_size[1] / frame_dims[1]
+    print(scale_x, scale_y)
+    ret = True
+    down_frames = []
+    orig_frames =[]
+    for frame in frames:
+        # Resize video frames and write to output video
+        #frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        resized = cv2.resize(frame, target_size)
+        orig_frames.append(frame)
+        down_frames.append(resized)
+    return down_frames, orig_frames
 
 scale_x, scale_y = 1, 1
 def downsample_video(cap, target_size=(320, 220)):
@@ -427,7 +473,7 @@ def main():
                 processed_frame = run_pose_tracking(frame, detector, tracker, pose_model, feature_model)
 
                 #Ball tracking model pipeline
-                down_frames, frames = downsample_video(video_path, target_size)
+                down_frames, frames = downsample_video(cap, target_size)
                 ball_position = []
                 for i, frame in enumerate(down_frames):
                     pred_pos = ball_track_model.predict(np.expand_dims(frame, axis=0)/ 255.0)
