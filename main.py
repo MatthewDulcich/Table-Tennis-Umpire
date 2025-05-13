@@ -437,8 +437,8 @@ def main():
             features_to_track = cv2.goodFeaturesToTrack(
                 prev_gray, maxCorners=500, qualityLevel=0.01, minDistance=5, blockSize=7
             )
-            ball_track_model = tf.keras.models.load_model("ball_tracker_model.keras")
-            ball_event_model = tf.keras.models.load_model("ball_event_model.keras")
+            ball_track_model = tf.keras.models.load_model("tracknet_pre_model.keras")
+            ball_event_model = tf.keras.models.load_model("ball_event_model_2.keras")
             target_size = (320, 220)
             while True:
                 ret, frame = cap.read()
