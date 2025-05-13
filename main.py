@@ -102,6 +102,8 @@ def stream_process_and_write(video_path, output_path, detector, tracker, pose_mo
     ball_track_model = tf.keras.models.load_model("ball_tracker_model.keras")
     ball_event_model = tf.keras.models.load_model("ball_event_model.keras")
     target_size = (320, 220)
+    scale_x = target_size[0] / frame_width
+    scale_y = target_size[1] / frame_height
 
     # Initialize tqdm progress bar
     progress_bar = tqdm(total=total_frames, desc="Processing Video", unit="frame")
@@ -422,81 +424,58 @@ def main():
                 if not ret:
                     print("[ERROR] Failed to read frame from camera.")
                     break
-                #Pose prediction
+
                 curr_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-                # Update quadrilateral points and optical flow points if enabled
+                # --- Optical Flow ---
                 if flow_state["use_optical_flow"]:
                     new_quad, quad_status, _ = cv2.calcOpticalFlowPyrLK(prev_gray, curr_gray, quad_pts, None, **lk_params)
                     if new_quad is not None and quad_status.sum() == 4:
                         quad_pts = new_quad
 
-                    # Update optical flow points
                     next_pts, status, _ = cv2.calcOpticalFlowPyrLK(prev_gray, curr_gray, features_to_track, None, **lk_params)
                     if next_pts is not None and status is not None:
                         valid_pts = next_pts[status.flatten() == 1]
                         features_to_track = valid_pts.reshape(-1, 1, 2)
-
-                        # Draw optical flow points
                         for pt in valid_pts:
                             x, y = pt.ravel()
                             cv2.circle(frame, (int(x), int(y)), 3, (0, 255, 255), -1)
 
-                # Draw table quadrilateral
+                # --- Pose Tracking ---
+                processed_frame = run_pose_tracking(frame.copy(), detector, tracker, pose_model, feature_model)
+
+                # --- Ball Tracking ---
+                resized_frame = cv2.resize(frame, target_size)
+                pred_pos = ball_track_model.predict(np.expand_dims(resized_frame, axis=0) / 255.0)
+                orig_x = int(float(pred_pos[0][0]) / scale_x)
+                orig_y = int(float(pred_pos[0][1]) / scale_y)
+
+                # --- Ball Event Detection ---
+                cropped_frame = crop_centered_with_padding(frame, (orig_x, orig_y), target_size)
+                cropped_frame = cv2.resize(cropped_frame, target_size)
+                pred_event = ball_event_model.predict(np.expand_dims(cropped_frame, axis=0))
+                event = np.argmax(pred_event[0])
+                event_label = {0: "bounce", 1: "net", 2: "empty_event"}[event]
+
+                # --- Annotate ---
+                cv2.circle(processed_frame, (orig_x, orig_y), 5, (0, 255, 0), -1)
+                processed_frame = place_event_in_frame(processed_frame, event_label, position=(10, 20))
                 quad_int = quad_pts.astype(int)
-                cv2.polylines(frame, [quad_int.reshape(-1, 2)], isClosed=True, color=(255, 0, 0), thickness=2)
-
-                # Process the frame
-                processed_frame = run_pose_tracking(frame, detector, tracker, pose_model, feature_model)
-
-                #Ball tracking model pipeline
-                down_frames, frames = downsample_video(cap, target_size)
-                ball_position = []
-                for i, frame in enumerate(down_frames):
-                    pred_pos = ball_track_model.predict(np.expand_dims(frame, axis=0)/ 255.0)
-                    print("Predicted position:")
-                    orig_x = int(float(pred_pos[0][0]) / float(scale_x))
-                    orig_y = int(float(pred_pos[0][1]) / float(scale_y))
-                    print(orig_x, orig_y)
-                    ball_position.append((orig_x, orig_y))
-                    #print(ball_position[-1])
-                
-                #Ball event prediciton pipeline
-                cropped_frames = []
-                events = []
-                event_labels = {0:"bounce", 1:"net", 2:"empty_event"}
-                for i, frame in enumerate(frames):
-                    x, y = ball_position[i]
-                    cropped_frame = crop_centered_with_padding(frame, (x, y), (320, 220))
-                    cropped_frames.append(cropped_frame)
-                    pred_event = ball_event_model.predict(np.expand_dims(cropped_frame, axis=0))
-                    #print(pred_event)
-                    event = np.argmax(pred_event[0])
-                    events.append(event_labels[event])
-                    
-                    #Write the event label and the ball track dot into pose detection frame
-                    processed_frame = place_event_in_frame(processed_frame, events[i], position=(10, 20))
-                    cv2.circle(processed_frame, (int(ball_position[i][0]), int(ball_position[i][1])), 5, (0, 255, 0), -1)
-
-                # Draw the quadrilateral on the processed frame
                 cv2.polylines(processed_frame, [quad_int.reshape(-1, 2)], isClosed=True, color=(0, 255, 0), thickness=2)
 
-                # Write the processed frame to the video writer
                 if processed_frame.shape[:2] != (frame_height, frame_width):
                     processed_frame = cv2.resize(processed_frame, (frame_width, frame_height))
-                video_writer.write(processed_frame)
 
+                video_writer.write(processed_frame)
                 cv2.imshow("Processed Frame", processed_frame)
 
                 key = cv2.waitKey(1) & 0xFF
                 if key == 7:  # Ctrl+G
                     print("[INFO] Ctrl+G detected. Stopping webcam recording...")
                     break
-                elif key == ord('s'):  # Toggle optical flow
+                elif key == ord('s'):
                     flow_state["use_optical_flow"] = not flow_state["use_optical_flow"]
                     print(f"[INFO] Toggled mode: {'Optical Flow' if flow_state['use_optical_flow'] else 'Static'}")
-
-                    # Reinitialize features to track when toggling optical flow
                     if flow_state["use_optical_flow"]:
                         features_to_track = cv2.goodFeaturesToTrack(
                             curr_gray, maxCorners=500, qualityLevel=0.01, minDistance=5, blockSize=7
