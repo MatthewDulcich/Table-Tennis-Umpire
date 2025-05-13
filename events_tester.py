@@ -26,7 +26,7 @@ with open(f"./data/test/{file_name}/ball_markup.json", 'r') as f:
 
 frame_nums = list(map(int, ball_data.keys()))
 #print(frame_nums)
-num_of_frames = 10
+num_of_frames = 100
 fps_out = 10
 
 frames = extract_specific_frames(video_path, frame_nums[0:num_of_frames])
@@ -74,7 +74,7 @@ def place_list_in_frame(img, text, position=(50, 50), font=cv2.FONT_HERSHEY_SIMP
 
     return img
 
-dest_video_path = f"./data/test/output.mp4"
+dest_video_path = f"./data/{file_name}/output.mp4"
 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
 out = cv2.VideoWriter(dest_video_path, fourcc, 10, target_size)
 for i, frame in enumerate(frames):
