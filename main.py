@@ -135,7 +135,7 @@ def stream_process_and_write(video_path, output_path, detector, tracker, pose_mo
                     prev_gray = curr_gray
 
                 quad_int = quad_pts.astype(int)
-                cv2.polylines(frame, [quad_int.reshape(-1, 2)], isClosed=True, color=(255, 0, 0), thickness=2)
+                cv2.polylines(frame, [quad_int.reshape(-1, 2)], isClosed=True, color=(0, 255, 0), thickness=2)
 
             cv2.imshow("Key Capture Window", frame)
             key = cv2.waitKey(1) & 0xFF
