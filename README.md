@@ -23,7 +23,7 @@ The **Table Tennis Umpire** project leverages computer vision and deep learning 
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/your-repo/Table-Tennis-Umpire.git
+git clone https://github.com/MatthewDulcich/Table-Tennis-Umpire.git
 cd Table-Tennis-Umpire
 ```
 
