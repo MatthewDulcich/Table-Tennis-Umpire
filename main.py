@@ -97,7 +97,11 @@ def stream_process_and_write(video_path, output_path, detector, tracker, pose_mo
 
     print("[INFO] Streaming frame-by-frame...")
     frame_count = 0
-    batch = []
+
+    # Load models once before the loop
+    ball_track_model = tf.keras.models.load_model("ball_tracker_model.keras")
+    ball_event_model = tf.keras.models.load_model("ball_event_model.keras")
+    target_size = (320, 220)
 
     # Initialize tqdm progress bar
     progress_bar = tqdm(total=total_frames, desc="Processing Video", unit="frame")
@@ -126,7 +130,7 @@ def stream_process_and_write(video_path, output_path, detector, tracker, pose_mo
                 print(f"[ERROR] Frame dimensions do not match: expected ({frame_height}, {frame_width}), got ({frame.shape[0]}, {frame.shape[1]})")
                 break
 
-            # If table corners are provided, draw the quadrilateral
+            # --- Optical Flow Update ---
             if quad_pts is not None:
                 if flow_state and flow_state.get("use_optical_flow", False) and prev_gray is not None:
                     curr_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -135,80 +139,55 @@ def stream_process_and_write(video_path, output_path, detector, tracker, pose_mo
                         quad_pts = new_quad
                     prev_gray = curr_gray
 
-                quad_int = quad_pts.astype(int)
-                cv2.polylines(frame, [quad_int.reshape(-1, 2)], isClosed=True, color=(0, 255, 0), thickness=2)
+            # --- Pose Estimation ---
+            processed_frame = run_pose_tracking(frame.copy(), detector, tracker, pose_model, feature_model)
 
-            cv2.imshow("Key Capture Window", frame)
+            # --- Ball Tracking ---
+            resized_frame = cv2.resize(frame, target_size)
+            pred_pos = ball_track_model.predict(np.expand_dims(resized_frame, axis=0) / 255.0)
+            orig_x = int(float(pred_pos[0][0]) / scale_x)
+            orig_y = int(float(pred_pos[0][1]) / scale_y)
+
+            # --- Ball Event Detection ---
+            cropped_frame = crop_centered_with_padding(frame, (orig_x, orig_y), target_size)
+            cropped_frame = cv2.resize(cropped_frame, target_size)
+            pred_event = ball_event_model.predict(np.expand_dims(cropped_frame, axis=0))
+            event = np.argmax(pred_event[0])
+            event_label = {0: "bounce", 1: "net", 2: "empty_event"}[event]
+
+            # --- Annotate Frame ---
+            cv2.circle(processed_frame, (orig_x, orig_y), 5, (0, 255, 0), -1)
+            processed_frame = place_event_in_frame(processed_frame, event_label, position=(10, 20))
+
+            # --- Draw Quad ---
+            if quad_pts is not None:
+                quad_int = quad_pts.astype(int)
+                cv2.polylines(processed_frame, [quad_int.reshape(-1, 2)], isClosed=True, color=(0, 255, 0), thickness=2)
+
+            # --- Output ---
+            if processed_frame.shape[:2] != (frame_height, frame_width):
+                processed_frame = cv2.resize(processed_frame, (frame_width, frame_height))
+
+            writer.write(processed_frame)
+            progress_bar.update(1)
+            cv2.imshow("Processed Frame", processed_frame)
+
+            # --- Key handling ---
             key = cv2.waitKey(1) & 0xFF
-            if key == 7:  # ASCII code for Ctrl+G
+            if key == 7:  # Ctrl+G
                 print("[INFO] Ctrl+G detected. Stopping gracefully...")
                 break
             elif key == ord('s') and flow_state is not None:
                 flow_state["use_optical_flow"] = not flow_state["use_optical_flow"]
                 print(f"[INFO] Toggled mode: {'Optical Flow' if flow_state['use_optical_flow'] else 'Static Only'}")
-
-                # Initialize prev_gray if optical flow just got enabled
                 if flow_state["use_optical_flow"]:
                     prev_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
-            batch.append(frame)
-            ball_track_model = tf.keras.models.load_model("ball_tracker_model.keras")
-            ball_event_model = tf.keras.models.load_model("ball_event_model.keras")
-            target_size = (320, 220)
-            if len(batch) == batch_size:
-                processed_batch = [run_pose_tracking(f, detector, tracker, pose_model, feature_model) for f in batch]
-                #Ball tracking model pipeline
-                down_frames, frames = downsample_frames(batch, target_size, (frame_width, frame_height))
-                ball_position = []
-                for i, frame in enumerate(down_frames):
-                    pred_pos = ball_track_model.predict(np.expand_dims(frame, axis=0)/ 255.0)
-                    print("Predicted position:")
-                    orig_x = int(float(pred_pos[0][0]) / float(scale_x))
-                    orig_y = int(float(pred_pos[0][1]) / float(scale_y))
-                    print(orig_x, orig_y)
-                    ball_position.append((orig_x, orig_y))
-                    #print(ball_position[-1])
-                
-                #Ball event prediciton pipeline
-                cropped_frames = []
-                events = []
-                event_labels = {0:"bounce", 1:"net", 2:"empty_event"}
-                for i, frame in enumerate(frames):
-                    x, y = ball_position[i]
-                    cropped_frame = crop_centered_with_padding(frame, (x, y), (320, 220))
-                    cropped_frames.append(cropped_frame)
-                    pred_event = ball_event_model.predict(np.expand_dims(cropped_frame, axis=0))
-                    #print(pred_event)
-                    event = np.argmax(pred_event[0])
-                    events.append(event_labels[event])
-                    
-                    #Write the event label and the ball track dot into pose detection frame
-                    processed_batch[i] = place_event_in_frame(processed_batch[i], events[i], position=(10, 20))
-                    cv2.circle(processed_batch[i], (int(ball_position[i][0]), int(ball_position[i][1])), 5, (0, 255, 0), -1)
-                for processed in processed_batch:
-                    if processed.shape[:2] != (frame_height, frame_width):
-                        processed = cv2.resize(processed, (frame_width, frame_height))
-                    writer.write(processed)
-                    frame_count += 1
-                    progress_bar.update(1)  # Update progress bar
-                batch = []
-
-        # Process remaining frames in the batch
-        if batch:
-            processed_batch = [run_pose_tracking(f, detector, tracker, pose_model, feature_model) for f in batch]
-            for processed in processed_batch:
-                if processed.shape[:2] != (frame_height, frame_width):
-                    processed = cv2.resize(processed, (frame_width, frame_height))
-                writer.write(processed)
-                frame_count += 1
-                progress_bar.update(1)  # Update progress bar
 
     except KeyboardInterrupt:
         print("[INFO] KeyboardInterrupt received. Processing any remaining frames before exit.")
 
     finally:
-        progress_bar.close()  # Close the progress bar
-        print("[DEBUG] Releasing resources.")
+        progress_bar.close()
         cap.release()
         writer.release()
         cv2.destroyAllWindows()
@@ -228,18 +207,16 @@ def get_unique_filename(output_dir, base_name, extension):
             return file_path
         counter += 1
 
-def downsample_frames(frames, target_size=(320, 220), frame_dims):
+def downsample_frames(frames, frame_dims, target_size=(320, 220)):
     global scale_x, scale_y
-    # Create video writer
+    # Calculate scaling factors
     scale_x = target_size[0] / frame_dims[0]
     scale_y = target_size[1] / frame_dims[1]
     print(scale_x, scale_y)
-    ret = True
     down_frames = []
-    orig_frames =[]
+    orig_frames = []
     for frame in frames:
-        # Resize video frames and write to output video
-        #frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        # Resize video frames
         resized = cv2.resize(frame, target_size)
         orig_frames.append(frame)
         down_frames.append(resized)
