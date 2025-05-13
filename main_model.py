@@ -58,8 +58,8 @@ if __name__ == "__main__":
     file_name = input("Enter the path to the video file: ")
     video_path = f"./data/test/{file_name}.mp4"
     #retrieve the models
-    ball_track_model = tf.keras.models.load_model("ball_tracker_model.keras")
-    ball_event_model = tf.keras.models.load_model("ball_event_model.keras")
+    ball_track_model = tf.keras.models.load_model("tracknet_pre_model.keras")
+    ball_event_model = tf.keras.models.load_model("ball_tracker_model.keras")
     target_size = (320, 220)
     while not os.path.exists(video_path):
         file_name = input("Enter the path to the video file: ")

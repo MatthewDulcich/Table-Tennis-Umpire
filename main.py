@@ -14,6 +14,7 @@ from threading import Thread
 import atexit
 from tqdm import tqdm
 import logging
+from table_detection import load_video, select_corners, process_video  # Import table detection functions
 
 logging.getLogger("ultralytics").setLevel(logging.WARNING)
 
@@ -67,7 +68,7 @@ class VideoStreamReader:
         self.cap.release()
 
 
-def stream_process_and_write(video_path, output_path, detector, tracker, pose_model, feature_model, batch_size=8):
+def stream_process_and_write(video_path, output_path, detector, tracker, pose_model, feature_model, batch_size=8, quad_pts=None):
     global cap, writer
     print(f"[DEBUG] Opening video file: {video_path}")
     cap = cv2.VideoCapture(video_path)
@@ -111,7 +112,12 @@ def stream_process_and_write(video_path, output_path, detector, tracker, pose_mo
                 print(f"[ERROR] Frame dimensions do not match: expected ({frame_height}, {frame_width}), got ({frame.shape[0]}, {frame.shape[1]})")
                 break
 
-            cv2.imshow("Key Capture Window", np.zeros((100, 400, 3), dtype=np.uint8))
+            # If table corners are provided, draw the quadrilateral
+            if quad_pts is not None:
+                quad_int = quad_pts.astype(int)
+                cv2.polylines(frame, [quad_int.reshape(-1, 2)], isClosed=True, color=(255, 0, 0), thickness=2)
+
+            cv2.imshow("Key Capture Window", frame)
             key = cv2.waitKey(1) & 0xFF
             if key == 7:  # ASCII code for Ctrl+G
                 print("[INFO] Ctrl+G detected. Stopping gracefully...")
@@ -178,6 +184,14 @@ def main():
             print("No video file selected. Exiting.")
             return
 
+        # Load video and select table corners
+        cap, first_frame = load_video(video_path)
+        if cap is None or first_frame is None:
+            return
+        quad_pts = select_corners(first_frame)
+        if quad_pts is None:
+            return
+
         detector = YOLO("models/yolov5nu.pt", verbose=False)
         pose_model = PoseModel()
         tracker = DeepSORT(max_age=5760)
@@ -195,7 +209,7 @@ def main():
         output_dir = 'output_videos'
         os.makedirs(output_dir, exist_ok=True)
         output_file = get_unique_filename(output_dir, "processed_output", ".mp4")
-        stream_process_and_write(video_path, output_file, detector, tracker, pose_model, feature_model)
+        stream_process_and_write(video_path, output_file, detector, tracker, pose_model, feature_model, quad_pts=quad_pts)
         print(f"[INFO] Processed video saved to: {output_file}")
 
     else:
@@ -219,6 +233,15 @@ def main():
             cap = cv2.VideoCapture(cameras[selected_index])
             if not cap.isOpened():
                 print("Failed to open selected camera.")
+                return
+
+            # Select table corners for webcam
+            ret, first_frame = cap.read()
+            if not ret:
+                print("Failed to read from webcam.")
+                return
+            quad_pts = select_corners(first_frame)
+            if quad_pts is None:
                 return
 
             frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -259,11 +282,15 @@ def main():
                     print("[ERROR] Failed to read frame from camera.")
                     break
 
+                # Draw table quadrilateral
+                if quad_pts is not None:
+                    quad_int = quad_pts.astype(int)
+                    cv2.polylines(frame, [quad_int.reshape(-1, 2)], isClosed=True, color=(255, 0, 0), thickness=2)
+
                 processed_frame = run_pose_tracking(frame, detector, tracker, pose_model, feature_model)
                 cv2.imshow("Processed Frame", processed_frame)
                 video_writer.write(processed_frame)
 
-                # No dummy popup for webcam mode
                 key = cv2.waitKey(1) & 0xFF
                 if key == 7:  # Ctrl+G
                     print("[INFO] Ctrl+G detected. Stopping webcam recording...")
