@@ -65,6 +65,7 @@ class Track:
         self.mean = self._xywh_to_state(bbox)
         self.cov = np.eye(7)
         self.feature = feature
+        self.smoothed_feature = feature  # Initialize smoothed feature
         self.age = 0
         self.time_since_update = 0
         self.max_age = max_age
@@ -117,6 +118,7 @@ class Track:
         measurement = self._xywh_to_state(bbox)[:4]
         self.mean, self.cov = self.kf.update(self.mean, self.cov, measurement)
         self.feature = feature
+        self.smoothed_feature = 0.9 * self.smoothed_feature + 0.1 * feature  # Exponential smoothing
         self.time_since_update = 0
 
 
@@ -184,14 +186,31 @@ class DeepSORT:
         cost = np.zeros((len(self.tracks), len(bboxes)))
         for i, t in enumerate(self.tracks):
             for j, f in enumerate(features):
-                cost[i, j] = 1 - np.dot(t.feature, f) / (np.linalg.norm(t.feature) * np.linalg.norm(f) + 1e-6)
+                # Appearance cost (cosine similarity)
+                appearance_cost = 1 - np.dot(t.feature, f) / (np.linalg.norm(t.feature) * np.linalg.norm(f) + 1e-6)
+                
+                # Spatial cost (Euclidean distance)
+                predicted_bbox = t.get_bbox()
+                detected_bbox = bboxes[j]
+                spatial_cost = np.linalg.norm(np.array(predicted_bbox[:2]) - np.array(detected_bbox[:2]))  # Distance between centers
+                
+                # Combine costs (weighted sum)
+                cost[i, j] = appearance_cost + 0.1 * spatial_cost  # Adjust weight as needed
+
+                # IoU cost
+                iou_cost = 1 - iou(t.get_bbox(), bboxes[j])  # IoU-based cost
+                cost[i, j] += 0.5 * iou_cost  # Adjust weight as needed
 
         row_ind, col_ind = linear_sum_assignment(cost)
 
         assigned_tracks = set()
         assigned_detections = set()
         for r, c in zip(row_ind, col_ind):
-            if cost[r, c] < 0.7:
+            predicted_bbox = self.tracks[r].get_bbox()
+            detected_bbox = bboxes[c]
+            velocity = np.linalg.norm(np.array(predicted_bbox[:2]) - np.array(detected_bbox[:2]))
+            
+            if velocity < 50:  # Threshold for maximum allowed velocity
                 self.tracks[r].update(bboxes[c], features[c])
                 assigned_tracks.add(r)
                 assigned_detections.add(c)
@@ -213,3 +232,20 @@ class DeepSORT:
 
         self.tracks = [t for t in self.tracks if t.time_since_update <= t.max_age]
         return self.tracks
+
+
+def iou(bbox1, bbox2):
+    x1, y1, w1, h1 = bbox1
+    x2, y2, w2, h2 = bbox2
+
+    xi1 = max(x1, x2)
+    yi1 = max(y1, y2)
+    xi2 = min(x1 + w1, x2 + w2)
+    yi2 = min(y1 + h1, y2 + h2)
+    inter_area = max(0, xi2 - xi1) * max(0, yi2 - yi1)
+
+    bbox1_area = w1 * h1
+    bbox2_area = w2 * h2
+    union_area = bbox1_area + bbox2_area - inter_area
+
+    return inter_area / union_area if union_area > 0 else 0
