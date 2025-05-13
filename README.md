@@ -48,6 +48,53 @@ conda activate table-tennis-umpire
 
 ---
 
+## Folder and Directory Setup
+
+To ensure the project runs smoothly, set up the following folder structure:
+
+```
+Table-Tennis-Umpire/
+├── models/
+│   ├── YOLOv5nu.pt
+│   ├── ball_tracker_model.keras
+│   ├── ball_event_model.keras
+├── data/
+│   ├── train/
+│   │   ├── game_1/
+│   │   │   ├── ball_markup.json
+│   │   │   ├── events_markup.json
+│   │   │   ├── game_1.mp4
+│   │   ├── game_2/
+│   │   │   ├── ball_markup.json
+│   │   │   ├── events_markup.json
+│   │   │   ├── game_2.mp4
+├── output/
+│   ├── processed_videos/
+│   ├── logs/
+```
+
+### Explanation:
+1. **`models/`**:
+    - Store all pre-trained model weights here.
+    - Ensure the filenames match those referenced in the code.
+
+2. **`data/`**:
+    - Organize training and testing data in subdirectories.
+    - Each game folder should contain:
+      - `ball_markup.json`: Ball position annotations.
+      - `events_markup.json`: Event annotations.
+      - The corresponding video file (e.g., `game_1.mp4`).
+
+3. **`input_data/`**:
+    - Use this directory to store raw input videos or datasets.
+    - Organize files by project or experiment for better management.
+
+4. **`output_video/`**:
+    - Store final processed videos with annotations and event highlights.
+    - Useful for reviewing results or sharing with others.
+
+---
+
 ## Usage
 
 ### Webcam Mode
