@@ -320,6 +320,10 @@ def main():
                 (frame_width, frame_height)
             )
 
+            if not video_writer.isOpened():
+                print("[ERROR] Failed to initialize video writer. Exiting.")
+                return
+
             # Initialize optical flow state
             flow_state = {"use_optical_flow": False}  # Default to static mode
 
@@ -328,8 +332,77 @@ def main():
 
             cv2.namedWindow("Processed Frame", cv2.WINDOW_NORMAL)
 
-            # Process the video with table detection
-            process_video(cap, first_frame, quad_pts, flow_state)
+            # Parameters for Lucas-Kanade Optical Flow
+            lk_params = dict(
+                winSize=(21, 21),
+                maxLevel=3,
+                criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 30, 0.01),
+            )
+
+            prev_gray = cv2.cvtColor(first_frame, cv2.COLOR_BGR2GRAY)
+
+            # Detect good features to track for optical flow points
+            features_to_track = cv2.goodFeaturesToTrack(
+                prev_gray, maxCorners=500, qualityLevel=0.01, minDistance=5, blockSize=7
+            )
+
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    print("[ERROR] Failed to read frame from camera.")
+                    break
+
+                curr_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+                # Update quadrilateral points and optical flow points if enabled
+                if flow_state["use_optical_flow"]:
+                    new_quad, quad_status, _ = cv2.calcOpticalFlowPyrLK(prev_gray, curr_gray, quad_pts, None, **lk_params)
+                    if new_quad is not None and quad_status.sum() == 4:
+                        quad_pts = new_quad
+
+                    # Update optical flow points
+                    next_pts, status, _ = cv2.calcOpticalFlowPyrLK(prev_gray, curr_gray, features_to_track, None, **lk_params)
+                    if next_pts is not None and status is not None:
+                        valid_pts = next_pts[status.flatten() == 1]
+                        features_to_track = valid_pts.reshape(-1, 1, 2)
+
+                        # Draw optical flow points
+                        for pt in valid_pts:
+                            x, y = pt.ravel()
+                            cv2.circle(frame, (int(x), int(y)), 3, (0, 255, 255), -1)
+
+                # Draw table quadrilateral
+                quad_int = quad_pts.astype(int)
+                cv2.polylines(frame, [quad_int.reshape(-1, 2)], isClosed=True, color=(255, 0, 0), thickness=2)
+
+                # Process the frame
+                processed_frame = run_pose_tracking(frame, detector, tracker, pose_model, feature_model)
+
+                # Draw the quadrilateral on the processed frame
+                cv2.polylines(processed_frame, [quad_int.reshape(-1, 2)], isClosed=True, color=(0, 255, 0), thickness=2)
+
+                # Write the processed frame to the video writer
+                if processed_frame.shape[:2] != (frame_height, frame_width):
+                    processed_frame = cv2.resize(processed_frame, (frame_width, frame_height))
+                video_writer.write(processed_frame)
+
+                cv2.imshow("Processed Frame", processed_frame)
+
+                key = cv2.waitKey(1) & 0xFF
+                if key == 7:  # Ctrl+G
+                    print("[INFO] Ctrl+G detected. Stopping webcam recording...")
+                    break
+                elif key == ord('s'):  # Toggle optical flow
+                    flow_state["use_optical_flow"] = not flow_state["use_optical_flow"]
+                    print(f"[INFO] Toggled mode: {'Optical Flow' if flow_state['use_optical_flow'] else 'Static'}")
+
+                    # Reinitialize features to track when toggling optical flow
+                    if flow_state["use_optical_flow"]:
+                        features_to_track = cv2.goodFeaturesToTrack(
+                            curr_gray, maxCorners=500, qualityLevel=0.01, minDistance=5, blockSize=7
+                        )
+
+                prev_gray = curr_gray
 
             cap.release()
             video_writer.release()
