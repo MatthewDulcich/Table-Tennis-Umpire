@@ -38,15 +38,17 @@ cd Table-Tennis-Umpire
 Install the required Python libraries for your platform:
 ```bash
 pip install -r dependencies/mac-requirements.txt
+```
 or
+```bash
 pip install -r dependencies/windows-requirements.txt
 ```
 
 Alternatively, create and activate a conda environment:
 ```bash
-conda create --name table-tennis-umpire --yes
+conda create --name table-tennis-umpire python=3.11.10 --yes
 conda activate table-tennis-umpire
-conda ependencies/mac-requirements.txt || (conda activate table-tennis-umpire && pip install -r dependencies/mac-requirements.txt)
+conda install --file dependencies/<platform>-requirements.txt || pip install -r dependencies/<platform>-requirements.txt
 ```
 
 How to remove conda envs
