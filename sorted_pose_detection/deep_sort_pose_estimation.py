@@ -56,12 +56,15 @@ def extract_crops_with_padding(frame: np.ndarray, bboxes: list, target_size: int
         target_size (int): The target size for the output crops (e.g., 224x224).
 
     Returns:
-        tuple: (crops, padding_info), where:
+        tuple: (crops, padding_info, original_bboxes), where:
             crops (np.ndarray): Array of cropped, resized, and padded image patches.
             padding_info (list): List of (pad_x, pad_y, new_w, new_h) for each crop.
+            original_bboxes (list): List of original bounding box coordinates [x1, y1, x2, y2].
     """
     crops = []
     padding_info = []
+    original_bboxes = []
+
     for x1, y1, x2, y2 in bboxes:
         x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])
         crop = frame[max(0, y1):max(0, y2), max(0, x1):max(0, x2)]
@@ -95,8 +98,9 @@ def extract_crops_with_padding(frame: np.ndarray, bboxes: list, target_size: int
             padding_info.append((pad_x, pad_y, new_w, new_h))
 
         crops.append(padded_crop)
+        original_bboxes.append((x1, y1, x2, y2))  # Store the original bounding box
 
-    return np.array(crops), padding_info
+    return np.array(crops), padding_info, original_bboxes
 
 
 def extract_features(images: np.ndarray, model: tf.keras.Model) -> np.ndarray:
@@ -115,7 +119,7 @@ def extract_features(images: np.ndarray, model: tf.keras.Model) -> np.ndarray:
     return model(images, training=False).numpy()
 
 
-def non_maximum_suppression_with_occlusion(boxes, scores, iou_threshold=0.5, occlusion_threshold=0.7):
+def non_maximum_suppression_with_occlusion(boxes, scores, iou_threshold=0.5, occlusion_threshold=0.6):
     """
     Applies Non-Maximum Suppression (NMS) while accounting for occlusion.
 
@@ -220,15 +224,15 @@ def run_pose_tracking(
         refined_bboxes = bboxes[keep_indices]
         refined_scores = scores[keep_indices]
 
-        # Extract crops and padding info for refined bounding boxes
-        crops, padding_info = extract_crops_with_padding(frame, refined_bboxes)
+        # Extract crops, padding info, and original bounding boxes
+        crops, padding_info, original_bboxes = extract_crops_with_padding(frame, refined_bboxes)
         features = extract_features(crops, feature_model)
 
         # Update the tracker with refined detections
         tracks = tracker.update(refined_bboxes, features)
 
         # Process each track and its corresponding crop
-        for track, crop, (pad_x, pad_y, new_w, new_h) in zip(tracks, crops, padding_info):
+        for track, crop, (pad_x, pad_y, new_w, new_h), original_bbox in zip(tracks, crops, padding_info, original_bboxes):
             if track.time_since_update > 0:
                 continue
 
@@ -237,17 +241,16 @@ def run_pose_tracking(
             crop = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)  # Convert to RGB
 
             poses = pose_model.predict(crop)
-            x1, y1, x2, y2 = map(int, track.get_bbox())
+            x1, y1, x2, y2 = original_bbox  # Use the original bounding box
             w, h = x2 - x1, y2 - y1
 
             for pose in poses:
                 keypoints = pose['keypoints']  # List of [x, y, confidence]
                 connections = pose['connections']  # List of (start_idx, end_idx)
 
-                # Validate keypoints and draw them
+                # Map keypoints back to the original frame
                 for px, py, confidence in keypoints:
                     if confidence > 0.5:  # Adjusted confidence threshold
-                        # Adjust keypoints for padding
                         px = (px - pad_x) / new_w * w + x1  # Scale x-coordinate
                         py = (py - pad_y) / new_h * h + y1  # Scale y-coordinate
 
@@ -255,28 +258,35 @@ def run_pose_tracking(
                         if 0 <= px < frame.shape[1] and 0 <= py < frame.shape[0]:
                             cv2.circle(frame, (int(px), int(py)), 5, (0, 255, 0), -1)
 
-                # Validate connections and draw them
+                # Draw connections
                 for start_idx, end_idx in connections:
                     if (
-                        keypoints[start_idx][2] > 0.5 and  # Confidence for start keypoint
-                        keypoints[end_idx][2] > 0.5       # Confidence for end keypoint
+                        keypoints[start_idx][2] > 0.5 and  # Confidence of start keypoint
+                        keypoints[end_idx][2] > 0.5       # Confidence of end keypoint
                     ):
-                        # Adjust connections for padding
+                        # Map start and end keypoints back to the original frame
                         x1_conn = (keypoints[start_idx][0] - pad_x) / new_w * w + x1
                         y1_conn = (keypoints[start_idx][1] - pad_y) / new_h * h + y1
                         x2_conn = (keypoints[end_idx][0] - pad_x) / new_w * w + x1
                         y2_conn = (keypoints[end_idx][1] - pad_y) / new_h * h + y1
 
-                        # Ensure connections are within frame bounds
+                        # Ensure the connection points are within frame bounds
                         if (
                             0 <= x1_conn < frame.shape[1] and 0 <= y1_conn < frame.shape[0] and
                             0 <= x2_conn < frame.shape[1] and 0 <= y2_conn < frame.shape[0]
                         ):
-                            cv2.line(frame, (int(x1_conn), int(y1_conn)), (int(x2_conn), int(y2_conn)), (255, 0, 0), 2)
+                            # Draw the line connecting the keypoints
+                            cv2.line(
+                                frame,
+                                (int(x1_conn), int(y1_conn)),
+                                (int(x2_conn), int(y2_conn)),
+                                (255, 0, 0),  # Line color (blue)
+                                2             # Line thickness
+                            )
 
             # Draw bounding box
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            cv2.putText(frame, f'ID: {track.id}', (x1, y1 - 10),
+            cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
+            cv2.putText(frame, f'ID: {track.id}', (int(x1), int(y1) - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
     return frame
