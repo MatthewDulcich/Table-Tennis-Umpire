@@ -35,15 +35,23 @@ cd Table-Tennis-Umpire
 - Place the weights in the `models/` directory.
 
 ### 3. Install Dependencies
-Install the required Python libraries:
+Install the required Python libraries for your platform:
 ```bash
-pip install -r requirements.txt
+pip install -r dependencies/mac-requirements.txt
+or
+pip install -r dependencies/windows-requirements.txt
 ```
 
 Alternatively, create and activate a conda environment:
 ```bash
-conda env create -f environment.yaml -n table-tennis-umpire
+conda create --name table-tennis-umpire --yes
 conda activate table-tennis-umpire
+conda ependencies/mac-requirements.txt || (conda activate table-tennis-umpire && pip install -r dependencies/mac-requirements.txt)
+```
+
+How to remove conda envs
+```bash
+conda remove --name table-tennis-umpire --all --yes
 ```
 
 ---
