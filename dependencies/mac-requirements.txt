@@ -15,6 +15,7 @@ google-pasta==0.2.0
 grpcio==1.71.0
 h5py==3.13.0
 idna==3.10
+imutils==0.5.4
 jax==0.6.0
 jaxlib==0.6.0
 Jinja2==3.1.6
@@ -62,8 +63,6 @@ tensorflow-io-gcs-filesystem==0.37.1
 tensorflow-macos==2.16.2
 tensorflow-metal==1.2.0
 termcolor==3.1.0
-torch==2.7.0
-torchvision==0.22.0
 tqdm==4.67.1
 typing_extensions==4.13.2
 tzdata==2025.2

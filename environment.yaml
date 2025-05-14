@@ -1,4 +1,0 @@
-name: '{environment_name}'
-channels:
-  - conda-forge
-  - deep-sort-realtime

@@ -1,3 +1,5 @@
+# This script uses background subtraction to find the differences in frames across time.
+
 import cv2
 import numpy as np
 
@@ -39,12 +41,12 @@ def background_subtraction():
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
         fg_mask = cv2.morphologyEx(fg_mask, cv2.MORPH_OPEN, kernel)
 
-        # 🎯 Adjusted HSV range for light-colored balls (tweak if needed)
+        # Adjusted HSV range for light-colored balls (tweak if needed)
         lower_ball = np.array([0, 0, 170])
         upper_ball = np.array([180, 90, 255])
         color_mask = cv2.inRange(hsv_frame, lower_ball, upper_ball)
 
-        # ✅ Combine foreground and color masks only (removes noisy adaptive threshold)
+        # Combine foreground and color masks only (removes noisy adaptive threshold)
         combined_mask = cv2.bitwise_or(fg_mask, color_mask)
 
         # Optional: refine the mask to reduce noise

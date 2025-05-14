@@ -1,3 +1,5 @@
+# Annotates a video using the ball coordinates from a JSON file.
+
 import cv2
 import json
 

@@ -1,3 +1,5 @@
+# Full pipeline for ball tracking and event detection
+
 import cv2
 import json
 import os

@@ -6,7 +6,7 @@ from tkinter import Tk
 from tkinter.filedialog import askopenfilename
 from read_webcam_stream import list_available_cameras
 from sorted_pose_detection import DeepSORT, PoseModel, run_pose_tracking
-from ball_event_train import crop_centered_with_padding, extract_specific_frames
+from train_models.ball_event_train import crop_centered_with_padding, extract_specific_frames
 from ultralytics import YOLO
 from tensorflow.keras.applications import MobileNetV3Small
 import tensorflow as tf
@@ -99,8 +99,8 @@ def stream_process_and_write(video_path, output_path, detector, tracker, pose_mo
     frame_count = 0
 
     # Load models once before the loop
-    ball_track_model = tf.keras.models.load_model("ball_tracker_model.keras")
-    ball_event_model = tf.keras.models.load_model("ball_event_model.keras")
+    ball_track_model = tf.keras.models.load_model("models/tracknet_pre_model.keras")
+    ball_event_model = tf.keras.models.load_model("models/ball_event_model.keras")
     target_size = (320, 220)
     scale_x = target_size[0] / frame_width
     scale_y = target_size[1] / frame_height

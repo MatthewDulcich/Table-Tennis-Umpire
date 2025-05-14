@@ -1,3 +1,4 @@
+# Trains a model to predict events based on ball position in a video
 import cv2
 import json
 import os

@@ -6,6 +6,7 @@
 # (python) range-detector --filter RGB --image /path/to/image.png
 # or
 # (python) range-detector --filter HSV --webcam
+# Used to get the range values of the colors in ball.jpg for the ball_online_track.py script.
 
 import cv2
 import argparse

@@ -1,3 +1,5 @@
+# Upload video and tests the events using json and the model and predicts the events
+
 import cv2
 import json
 import os
@@ -5,7 +7,7 @@ import tensorflow as tf
 from tensorflow.keras import layers, models
 from tensorflow.keras.optimizers.schedules import ExponentialDecay
 import numpy as np
-from ball_event_train import crop_centered_with_padding, extract_specific_frames, data_preprocess
+from train_models.ball_event_train import crop_centered_with_padding, extract_specific_frames, data_preprocess
 
 file_name = input("Enter the path to the video file: ")
 video_path = f"./data/test/{file_name}.mp4"
