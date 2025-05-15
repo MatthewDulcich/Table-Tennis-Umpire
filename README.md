@@ -128,8 +128,8 @@ python main.py --opticalflow
 ---
 
 ## Output Directory
-- Processed videos and logs are saved in the `output/` directory.
-- Ensure this directory exists or is created during runtime.
+- Processed videos are saved in the `output_videos/` directory.
+- Ensure this directory exists.
 
 ---
 
@@ -141,7 +141,7 @@ The project requires the following Python libraries:
 - Matplotlib
 - tqdm
 
-Refer to `requirements.txt` or `environment.yaml` for the full list of dependencies.
+Refer to `dependenciest` for the full list of dependencies for your platform.
 
 ---
 
@@ -151,7 +151,6 @@ Refer to `requirements.txt` or `environment.yaml` for the full list of dependenc
 - **Frame Dropping**:
   - Might happen with high-resolution videos.
 - **Stuttering in Webcam Mode**:
-  - Ensure consistent frame dimensions and scaling factors to avoid stuttering.
 
 ---
 
@@ -164,7 +163,7 @@ Refer to `requirements.txt` or `environment.yaml` for the full list of dependenc
 ---
 
 ## Contributing
-Contributions are welcome! Please fork the repository and submit a pull request with your changes.
+Contributions are welcome after May 21, 2025! Please fork the repository and submit a pull request with your changes.
 
 ---
 
