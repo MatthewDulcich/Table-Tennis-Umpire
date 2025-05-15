@@ -62,6 +62,8 @@ conda remove --name table-tennis-umpire --all --yes
 
 To ensure the project runs smoothly, set up the following folder structure:
 
+You can download the training and testing data from the [OpenTTGames Dataset](https://lab.osai.ai/).
+
 ```
 Table-Tennis-Umpire/
 ├── models/
