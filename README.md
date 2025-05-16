@@ -27,14 +27,49 @@ git clone https://github.com/MatthewDulcich/Table-Tennis-Umpire.git
 cd Table-Tennis-Umpire
 ```
 
-### 2. Download Model Weights
+### 2. Docker Option
+
+#### Build Docker Image
+To build the Docker image, run the following command:
+```bash
+docker build -t table-tennis-umpire -f Dockerfile.dockerfile .
+```
+
+#### Run Docker Container
+To run the Docker container, use the following command:
+```bash
+docker run --rm -it \
+  --gpus all \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/input_data:/app/input_data \
+  -v $(pwd)/output_videos:/app/output_videos \
+  --device=/dev/video0:/dev/video0 \
+  --device=/dev/video1:/dev/video1 \
+  table-tennis-umpire
+```
+
+#### Optional Flags
+- `--video`: Process a video file instead of using the webcam. By default, the application runs using the webcam.
+- `--opticalflow`: Use optical flow for table detection in video processing mode. If using the webcam, press `s` to enable optical flow.
+- You can pass multiple cameras if available.
+
+#### Explanation of Flags
+- `--rm`: Automatically removes the container after it stops.
+- `-it`: Runs the container interactively with a terminal.
+- `-v $(pwd)/data:/app/data`: Mounts the `data` folder from your host machine to `/app/data` inside the container.
+- `-v $(pwd)/input_data:/app/input_data`: Mounts the `input_data` folder from your host machine to `/app/input_data` inside the container.
+- `-v $(pwd)/output_videos:/app/output_videos`: Mounts the `output_videos` folder from your host machine to `/app/output_videos` inside the container.
+- `--device=/dev/video0:/dev/video0`: Passes through the webcam device (`/dev/video0`) from your host machine to the container.
+- `table-tennis-umpire`: The name of the Docker image you built.
+
+### 3. Double check the Model Weights
 - Download the following model weights:
-  - [YOLOv5nu.pt](https://example.com/yolo5nu.pt) for player and ball detection.
+  - YOLOv5nu.pt for player and ball detection (should be automatically downloaded).
   - `ball_tracker_model.keras` for ball position prediction.
   - `ball_event_model.keras` for event detection.
 - Place the weights in the `models/` directory.
 
-### 3. Install Dependencies
+### 4. Install Dependencies
 Install the required Python libraries for your platform:
 ```bash
 pip install -r dependencies/mac-requirements.txt
@@ -114,6 +149,8 @@ Run the application using your webcam:
 ```bash
 python main.py
 ```
+- Press `Ctrl+G` to exit webcam mode.
+- Press `s` to switch from static to optical flow table detection.
 
 ### Video File Mode
 Process a video file:
@@ -171,3 +208,4 @@ Contributions are welcome after May 21, 2025! Please fork the repository and sub
 
 ## License
 This project is licensed under the MIT License. See the `LICENSE` file for details.
+
