@@ -9,9 +9,9 @@ The **Table Tennis Umpire** project leverages computer vision and deep learning 
 - **Real-time Ball and Player Tracking**:
   - Detects and tracks the ball and players during matches.
 - **Event Detection**:
-  - Identifies key events such as ball bounces, net hits, and empty frames.
+  - Identifies key events such as ball bounces, net hits, and empty frames (Implemented needs better results).
 - **Optical Flow Support**:
-  - Enhances tracking accuracy using Lucas-Kanade optical flow.
+  - Enhances tracking accuracy using Lucas-Kanade optical flow for table detection.
 - **Webcam and Video File Support**:
   - Works with live webcam feeds or pre-recorded video files.
 - **Customizable Annotations**:
@@ -29,22 +29,12 @@ cd Table-Tennis-Umpire
 
 ### 2. Download Model Weights
 - Download the following model weights:
-  - [YOLOv5nu.pt](https://example.com/yolo5nu.pt) for player and ball detection.
-  - `ball_tracker_model.keras` for ball position prediction.
-  - `ball_event_model.keras` for event detection.
+  - YOLOv5nu.pt auto downloads make sure to put it in the models directory for player and ball detection.
+  - `ball_tracker_model.keras` given for ball position prediction.
+  - `ball_event_model.keras` given for event detection.
 - Place the weights in the `models/` directory.
 
-### 3. Install Dependencies
-Install the required Python libraries for your platform:
-```bash
-pip install -r dependencies/mac-requirements.txt
-```
-or
-```bash
-pip install -r dependencies/windows-requirements.txt
-```
-
-Alternatively, create and activate a conda environment:
+### 3. Create and activate a conda environment for your platform (mac or windows):
 ```bash
 conda create --name table-tennis-umpire python=3.11.10 --yes
 conda activate table-tennis-umpire
@@ -56,6 +46,16 @@ How to remove conda envs
 conda remove --name table-tennis-umpire --all --yes
 ```
 
+### 4. Install Dependencies
+Install the required Python libraries for your platform:
+```bash
+pip install -r dependencies/mac-requirements.txt
+```
+or
+```bash
+pip install -r dependencies/windows-requirements.txt
+```
+
 ---
 
 ## Folder and Directory Setup
@@ -63,6 +63,7 @@ conda remove --name table-tennis-umpire --all --yes
 To ensure the project runs smoothly, set up the following folder structure:
 
 You can download the training and testing data from the [OpenTTGames Dataset](https://lab.osai.ai/).
+For training you only need the training data, for testing purposes you 
 
 ```
 Table-Tennis-Umpire/
@@ -143,7 +144,7 @@ The project requires the following Python libraries:
 - Matplotlib
 - tqdm
 
-Refer to `dependenciest` for the full list of dependencies for your platform.
+Refer to `dependencies/` for the full list of dependencies for your platform.
 
 ---
 
