@@ -1,8 +1,0 @@
-__pycache__/
-data/
-input_data/
-output_videos/
-models/models_backup/
-.gitignore
-.git
-.DS_Store
