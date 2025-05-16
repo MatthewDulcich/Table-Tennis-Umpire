@@ -158,7 +158,7 @@ def stream_process_and_write(video_path, output_path, detector, tracker, pose_mo
             event_label = {0: "bounce", 1: "net", 2: "empty_event"}[event]
 
             # --- Annotate Frame ---
-            cv2.circle(processed_frame, (orig_x, orig_y), 5, (0, 255, 0), -1)
+            cv2.circle(processed_frame, (orig_x, orig_y), 5, (0, 0, 255), -1)
             processed_frame = place_event_in_frame(processed_frame, event_label, position=(10, 20))
 
             # --- Draw Quad ---
@@ -458,7 +458,7 @@ def main():
                 event_label = {0: "bounce", 1: "net", 2: "empty_event"}[event]
 
                 # --- Annotate ---
-                cv2.circle(processed_frame, (orig_x, orig_y), 5, (0, 255, 0), -1)
+                cv2.circle(processed_frame, (orig_x, orig_y), 5, (0, 0, 255), -1)
                 processed_frame = place_event_in_frame(processed_frame, event_label, position=(10, 20))
                 quad_int = quad_pts.astype(int)
                 cv2.polylines(processed_frame, [quad_int.reshape(-1, 2)], isClosed=True, color=(0, 255, 0), thickness=2)

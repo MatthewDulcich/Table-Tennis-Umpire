@@ -40,9 +40,9 @@ To run the Docker container, use the following command:
 ```bash
 docker run --rm -it \
   --gpus all \
-  -v $(pwd)/data:/app/data \
-  -v $(pwd)/input_data:/app/input_data \
-  -v $(pwd)/output_videos:/app/output_videos \
+  -v "$(pwd)/data:/app/data" \
+  -v "$(pwd)/input_data:/app/input_data" \
+  -v "$(pwd)/output_videos:/app/output_videos" \
   --device=/dev/video0:/dev/video0 \
   --device=/dev/video1:/dev/video1 \
   table-tennis-umpire

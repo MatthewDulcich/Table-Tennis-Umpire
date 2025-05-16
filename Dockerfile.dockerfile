@@ -9,7 +9,7 @@ RUN mkdir -p output_videos
 
 COPY . /app
 #Install sys commands?
-RUN apt-get update && apt-get install -y ffmpeg libsm6 libxext6 v4l-utils && apt-get clean
+RUN apt-get update && apt-get install -y ffmpeg libsm6 libxext6 v4l-utils python3-tk && apt-get clean
 RUN pip install -r ./dependencies/linux-requirements.txt
 
 CMD ["python", "./main.py"]
